@@ -42,18 +42,45 @@ class RegisterSerializer(serializers.ModelSerializer):
     # ── Validation unicite email / CNI ────────────────────────────────────────
     def validate_email(self, value):
         value = value.lower().strip()
-        if User.objects.filter(email__iexact=value).exists():
-            raise serializers.ValidationError("Un compte existe deja avec cet email.")
+        user_type = self.initial_data.get('user_type', User.BUYER)
+        if User.objects.filter(email__iexact=value, user_type=user_type).exists():
+            raise serializers.ValidationError(
+                "Un compte de ce type existe déjà avec cette adresse email."
+            )
         return value
 
     def validate_id_card_number(self, value):
         value = value.strip().replace(' ', '')
-        if User.objects.filter(id_card_number=value).exists():
-            raise serializers.ValidationError("Cette carte d'identite est deja enregistree.")
+        user_type = self.initial_data.get('user_type', User.BUYER)
+        if User.objects.filter(id_card_number=value, user_type=user_type).exists():
+            raise serializers.ValidationError(
+                "Un compte de ce type existe déjà avec ce numéro de carte d'identité."
+            )
         return value
 
     def validate_phone(self, value):
-        return value.strip().replace(' ', '')
+        value = value.strip().replace(' ', '')
+        user_type = self.initial_data.get('user_type', User.BUYER)
+        if User.objects.filter(phone=value, user_type=user_type).exists():
+            raise serializers.ValidationError(
+                "Un compte de ce type existe déjà avec ce numéro de téléphone."
+            )
+        return value
+
+    def validate(self, data):
+        # Unicité du nom de vendeur (company)
+        if data.get('user_type') == User.SELLER and data.get('company'):
+            company = data['company'].strip()
+            from cars.models import Seller
+            if Seller.objects.filter(name__iexact=company).exists():
+                raise serializers.ValidationError(
+                    {'company': "Ce nom de vendeur est déjà utilisé. Veuillez en choisir un autre."}
+                )
+            if User.objects.filter(company__iexact=company, user_type=User.SELLER).exists():
+                raise serializers.ValidationError(
+                    {'company': "Ce nom de vendeur est déjà utilisé. Veuillez en choisir un autre."}
+                )
+        return data
 
     def create(self, validated_data):
         password = validated_data.pop('password')

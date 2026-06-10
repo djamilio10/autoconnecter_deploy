@@ -1,6 +1,6 @@
 import React from 'react';
 import { C, Input } from './Shared';
-import { authApi } from '../api';
+import { authApi, sellersApi } from '../api';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const NOTIF_KEY = 'ac_notifications';
@@ -101,6 +101,52 @@ function SaveBtn({ onClick, loading, label = 'Enregistrer' }) {
 
 // ── SECTIONS ──────────────────────────────────────────────────────────────────
 
+function LogoUploader({ user }) {
+  const [logoPreview, setLogoPreview] = React.useState(null);
+  const [uploading, setUploading] = React.useState(false);
+  const [done, setDone] = React.useState(false);
+
+  const handleFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => setLogoPreview(ev.target.result);
+    reader.readAsDataURL(file);
+    setUploading(true); setDone(false);
+    try {
+      await sellersApi.uploadLogo(file);
+      setDone(true);
+    } catch { /* ignore */ }
+    finally { setUploading(false); e.target.value = ''; }
+  };
+
+  return (
+    <div style={{ marginBottom: 24, padding: 20, background: '#18181b', borderRadius: 12, border: `1px solid ${C.border}` }}>
+      <div style={{ fontFamily: C.dm, fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 12 }}>Logo de boutique</div>
+      <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div style={{
+          width: 60, height: 60, borderRadius: 10, background: '#27272A',
+          border: `2px dashed ${done ? '#4caf7d' : C.border}`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          overflow: 'hidden', flexShrink: 0, transition: 'border-color 0.2s',
+        }}>
+          {logoPreview
+            ? <img src={logoPreview} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            : <span style={{ fontSize: 22 }}>🏪</span>
+          }
+        </div>
+        <div>
+          <div style={{ fontFamily: C.dm, fontSize: 13, color: done ? '#4caf7d' : C.muted }}>
+            {uploading ? '⏳ Envoi...' : done ? '✓ Logo mis à jour !' : 'Cliquer pour changer le logo'}
+          </div>
+          <div style={{ fontFamily: C.dm, fontSize: 11, color: C.faint, marginTop: 3 }}>JPG, PNG, WebP</div>
+        </div>
+        <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFile} />
+      </label>
+    </div>
+  );
+}
+
 function ProfileSection({ user, setUser }) {
   const [form, setForm] = React.useState({
     first_name: user.first_name || '',
@@ -126,6 +172,7 @@ function ProfileSection({ user, setUser }) {
 
   return (
     <Section title="Informations personnelles" sub="Modifiez vos informations de profil">
+      {user.user_type === 'seller' && <LogoUploader user={user} />}
       <Alert type={msg?.type} msg={msg?.text} />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
         <Input label="Prénom" value={form.first_name} onChange={e => setForm(f => ({ ...f, first_name: e.target.value }))} />

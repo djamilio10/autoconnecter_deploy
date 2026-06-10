@@ -1,4 +1,5 @@
 import React from 'react';
+import { notificationsApi } from '../api';
 
 // ── Prix FCFA ─────────────────────────────────────────────────────────────────
 export const toCFA = (price) => {
@@ -115,12 +116,156 @@ export const Logo = ({ size = 'md', onClick }) => {
   );
 };
 
+// ── NotificationBell ─────────────────────────────────────────────────────────
+export const NotificationBell = ({ user, navigate }) => {
+  const [open, setOpen] = React.useState(false);
+  const [notifs, setNotifs] = React.useState([]);
+  const ref = React.useRef(null);
+
+  const unread = notifs.filter(n => !n.is_read).length;
+
+  const load = React.useCallback(() => {
+    if (!user) return;
+    notificationsApi.list().then(r => setNotifs(r.data || [])).catch(() => {});
+  }, [user]);
+
+  React.useEffect(() => {
+    load();
+    const id = setInterval(load, 30000); // poll toutes les 30s
+    return () => clearInterval(id);
+  }, [load]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const onClick = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, [open]);
+
+  const handleOpen = () => {
+    setOpen(o => !o);
+    if (!open && unread > 0) {
+      notificationsApi.markRead([]).then(() => {
+        setNotifs(prev => prev.map(n => ({ ...n, is_read: true })));
+      }).catch(() => {});
+    }
+  };
+
+  const TYPE_ICONS = {
+    appointment_new: '📅',
+    appointment_confirmed: '✅',
+    appointment_cancelled: '❌',
+    appointment_completed: '🏁',
+    new_review: '⭐',
+    new_message: '💬',
+  };
+
+  const handleNotifClick = (n) => {
+    setOpen(false);
+    if (!navigate) return;
+    if (n.type === 'new_message') {
+      navigate('messaging');
+    } else if (['appointment_new', 'appointment_confirmed', 'appointment_cancelled', 'appointment_completed'].includes(n.type)) {
+      if (user?.user_type === 'seller') navigate('seller_dashboard');
+      else navigate('buyer_dashboard');
+    } else if (n.type === 'new_review') {
+      navigate('seller_dashboard');
+    }
+  };
+
+  if (!user) return null;
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        onClick={handleOpen}
+        style={{
+          position: 'relative', background: 'none', border: 'none',
+          color: open ? C.gold : C.muted, cursor: 'pointer',
+          width: 36, height: 36, borderRadius: 8, display: 'flex',
+          alignItems: 'center', justifyContent: 'center', fontSize: 18,
+          transition: 'color 0.15s',
+        }}
+        title="Notifications"
+      >
+        🔔
+        {unread > 0 && (
+          <span style={{
+            position: 'absolute', top: 4, right: 4,
+            background: '#e05c5c', color: '#fff',
+            fontSize: 9, fontWeight: 700, fontFamily: C.dm,
+            width: 16, height: 16, borderRadius: '50%',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>{unread > 9 ? '9+' : unread}</span>
+        )}
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: 44, right: 0, width: 320,
+          background: C.surface, border: `1px solid ${C.border}`,
+          borderRadius: 14, boxShadow: '0 16px 40px rgba(0,0,0,0.6)',
+          zIndex: 300, overflow: 'hidden',
+        }}>
+          <div style={{
+            padding: '14px 16px', borderBottom: `1px solid ${C.border2}`,
+            fontFamily: C.dm, fontSize: 13, fontWeight: 600, color: C.text,
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          }}>
+            <span>Notifications</span>
+            {unread > 0 && (
+              <span style={{
+                background: 'rgba(224,92,92,0.15)', color: '#f87171',
+                fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 10,
+              }}>{unread} non lu{unread > 1 ? 'es' : 'e'}</span>
+            )}
+          </div>
+
+          <div style={{ maxHeight: 360, overflowY: 'auto' }}>
+            {notifs.length === 0 ? (
+              <div style={{ padding: '32px 16px', textAlign: 'center', fontFamily: C.dm, fontSize: 13, color: C.muted }}>
+                Aucune notification
+              </div>
+            ) : notifs.slice(0, 20).map(n => (
+              <div key={n.id} onClick={() => handleNotifClick(n)} style={{
+                padding: '12px 16px',
+                background: n.is_read ? 'transparent' : 'rgba(201,169,110,0.04)',
+                borderBottom: `1px solid ${C.border2}`,
+                cursor: 'pointer',
+                transition: 'background 0.15s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(201,169,110,0.08)'}
+              onMouseLeave={e => e.currentTarget.style.background = n.is_read ? 'transparent' : 'rgba(201,169,110,0.04)'}
+              >
+                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                  <span style={{ fontSize: 16, flexShrink: 0 }}>{TYPE_ICONS[n.type] || '🔔'}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontFamily: C.dm, fontSize: 13, color: C.text, lineHeight: 1.4 }}>{n.message}</div>
+                    <div style={{ fontFamily: C.dm, fontSize: 11, color: C.muted, marginTop: 4 }}>
+                      {new Date(n.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                  </div>
+                  {!n.is_read && (
+                    <div style={{ width: 7, height: 7, borderRadius: '50%', background: C.gold, flexShrink: 0, marginTop: 4 }} />
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ── Navbar ────────────────────────────────────────────────────────────────────
 export const Navbar = ({ user, navigate, currentView, onLogout }) => {
   const [menuOpen, setMenuOpen] = React.useState(false);
+  const [burgerOpen, setBurgerOpen] = React.useState(false);
   const menuRef = React.useRef(null);
+  const burgerRef = React.useRef(null);
 
-  // Ferme le menu quand on clique ailleurs
+  // Ferme le menu utilisateur quand on clique ailleurs
   React.useEffect(() => {
     if (!menuOpen) return;
     const onClick = (e) => {
@@ -130,13 +275,23 @@ export const Navbar = ({ user, navigate, currentView, onLogout }) => {
     return () => document.removeEventListener('mousedown', onClick);
   }, [menuOpen]);
 
+  // Ferme le menu hamburger quand on clique ailleurs
+  React.useEffect(() => {
+    if (!burgerOpen) return;
+    const onClick = (e) => {
+      if (burgerRef.current && !burgerRef.current.contains(e.target)) setBurgerOpen(false);
+    };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, [burgerOpen]);
+
   const navLinks = [
     { label: 'Catalogue', view: 'catalogue' },
     { label: 'Comment ça marche', view: 'how' },
   ];
 
   return (
-    <nav style={{
+    <nav className="ac-nav" style={{
       position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
       background: 'rgba(9,9,11,0.85)', backdropFilter: 'blur(16px)',
       borderBottom: `1px solid ${C.border2}`, height: 64,
@@ -146,7 +301,8 @@ export const Navbar = ({ user, navigate, currentView, onLogout }) => {
 
       <div style={{ flex: 1 }} />
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
+      {/* Liens de navigation — cachés en mobile */}
+      <div className="ac-nav-links" style={{ display: 'flex', alignItems: 'center', gap: 28, marginRight: 28 }}>
         {navLinks.map(l => (
           <button key={l.view} onClick={() => navigate(l.view)} style={{
             background: 'none', border: 'none',
@@ -155,11 +311,16 @@ export const Navbar = ({ user, navigate, currentView, onLogout }) => {
             transition: 'color 0.2s',
           }}>{l.label}</button>
         ))}
+      </div>
+
+      {/* Section auth/utilisateur — TOUJOURS visible */}
+      <div className="ac-nav-auth" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        {user && <NotificationBell user={user} navigate={navigate} />}
 
         {user ? (
           <div ref={menuRef} style={{ display: 'flex', gap: 10, alignItems: 'center', position: 'relative' }}>
             {(user.is_staff || user.user_type === 'admin') && (
-              <button onClick={() => navigate('admin-dashboard')} style={{
+              <button onClick={() => navigate('admin-dashboard')} className="ac-admin-btn" style={{
                 background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.35)',
                 color: '#f87171', fontFamily: C.dm, fontSize: 11, fontWeight: 700,
                 padding: '6px 12px', borderRadius: 8, cursor: 'pointer', letterSpacing: '0.04em',
@@ -167,6 +328,7 @@ export const Navbar = ({ user, navigate, currentView, onLogout }) => {
             )}
             <button
               onClick={() => setMenuOpen(o => !o)}
+              className="ac-user-btn"
               style={{
                 background: C.goldDim, border: `1px solid ${C.goldBorder}`,
                 color: C.gold, fontFamily: C.dm, fontSize: 13, fontWeight: 600,
@@ -185,7 +347,7 @@ export const Navbar = ({ user, navigate, currentView, onLogout }) => {
                   : (user.avatar_initials || (user.first_name?.[0] || 'U').toUpperCase())
                 }
               </span>
-              {user.first_name || 'Mon espace'}
+              <span className="ac-user-name">{user.first_name || 'Mon espace'}</span>
               <span style={{ fontSize: 9, opacity: 0.7 }}>▾</span>
             </button>
 
@@ -209,6 +371,7 @@ export const Navbar = ({ user, navigate, currentView, onLogout }) => {
 
                 {[
                   { label: '📊  Mon tableau de bord', action: () => navigate(user.user_type === 'seller' ? 'seller-dashboard' : user.user_type === 'admin' ? 'admin-dashboard' : 'buyer-dashboard') },
+                  { label: '💬  Messagerie',           action: () => navigate('messaging') },
                   { label: '⚙️  Paramètres',          action: () => navigate('settings') },
                 ].map(item => (
                   <button key={item.label}
@@ -239,20 +402,59 @@ export const Navbar = ({ user, navigate, currentView, onLogout }) => {
             )}
           </div>
         ) : (
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button onClick={() => navigate('auth', { mode: 'login' })} style={{
+          <div className="ac-auth-btns" style={{ display: 'flex', gap: 10 }}>
+            <button onClick={() => navigate('auth', { mode: 'login' })} className="ac-btn-login" style={{
               background: 'none', border: `1px solid ${C.border}`,
               color: C.text, fontFamily: C.dm, fontSize: 14, fontWeight: 500,
               padding: '8px 16px', borderRadius: 8, cursor: 'pointer',
-              transition: 'border-color 0.2s',
+              transition: 'border-color 0.2s', whiteSpace: 'nowrap',
             }}>Connexion</button>
-            <button onClick={() => navigate('auth', { mode: 'register' })} style={{
+            <button onClick={() => navigate('auth', { mode: 'register' })} className="ac-btn-register" style={{
               background: C.gold, border: 'none', color: C.bg,
               fontFamily: C.dm, fontSize: 14, fontWeight: 700,
               padding: '8px 18px', borderRadius: 8, cursor: 'pointer',
+              whiteSpace: 'nowrap',
             }}>S'inscrire</button>
           </div>
         )}
+
+        {/* Hamburger mobile — visible uniquement en mobile via CSS */}
+        <div ref={burgerRef} className="ac-nav-burger" style={{ position: 'relative' }}>
+          <button
+            onClick={() => setBurgerOpen(o => !o)}
+            style={{
+              background: 'none', border: `1px solid ${C.border}`,
+              color: C.text, cursor: 'pointer',
+              width: 38, height: 38, borderRadius: 8,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 18, padding: 0,
+            }}
+            aria-label="Menu"
+          >☰</button>
+
+          {burgerOpen && (
+            <div style={{
+              position: 'absolute', top: 48, right: 0, minWidth: 200,
+              background: C.surface, border: `1px solid ${C.border}`,
+              borderRadius: 12, padding: 6, boxShadow: '0 12px 32px rgba(0,0,0,0.5)',
+              zIndex: 200,
+            }}>
+              {navLinks.map(l => (
+                <button key={l.view}
+                  onClick={() => { setBurgerOpen(false); navigate(l.view); }}
+                  style={{
+                    width: '100%', textAlign: 'left', background: 'none', border: 'none',
+                    color: currentView === l.view ? C.gold : C.text,
+                    fontFamily: C.dm, fontSize: 14, fontWeight: 500,
+                    padding: '12px 14px', borderRadius: 8, cursor: 'pointer',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = C.border2}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >{l.label}</button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </nav>
   );
@@ -357,7 +559,12 @@ export const CarCard = ({ car, seller, onClick, isFavorite, onToggleFavorite, pr
               width: 28, height: 28, borderRadius: '50%', background: '#27272A',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontFamily: C.dm, fontSize: 10, fontWeight: 700, color: C.muted, flexShrink: 0,
-            }}>{seller.avatar}</div>
+              overflow: 'hidden',
+            }}>
+              {seller.logo_url
+                ? <img src={seller.logo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                : seller.avatar}
+            </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontFamily: C.dm, fontSize: 12, color: C.text, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {seller.name}

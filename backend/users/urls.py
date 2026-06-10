@@ -4,6 +4,8 @@ from . import admin_views
 
 urlpatterns = [
     path('register/', views.register),
+    path('verify-email/', views.verify_email),
+    path('resend-verification/', views.resend_verification),
     path('settings/', views.public_settings),
     path('login/', views.login),
     path('logout/', views.logout),
@@ -11,6 +13,8 @@ urlpatterns = [
     path('profile/update/', views.update_profile),
     path('change-password/', views.change_password),
     path('avatar/', views.upload_avatar),
+    path('notifications/', views.notifications_list),
+    path('notifications/read/', views.notifications_mark_read),
 
     # Admin endpoints
     path('admin/stats/', admin_views.admin_stats),

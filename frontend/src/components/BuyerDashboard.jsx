@@ -1,11 +1,12 @@
 import React from 'react';
 import { C, CarCard, StatusBadge, Spinner, Btn, toCFA } from './Shared';
-import { appointmentsApi, favoritesApi } from '../api';
+import { appointmentsApi, favoritesApi, rentalApi } from '../api';
 
-const TABS = ['Mes rendez-vous', 'Mes favoris', 'Mon profil'];
+const TABS = ['Mes rendez-vous', 'Mes locations', 'Mes favoris', 'Mon profil'];
 
 export default function BuyerDashboard({ user, navigate, favorites, onToggleFavorite }) {
   const [appointments, setAppointments] = React.useState([]);
+  const [rentalRequests, setRentalRequests] = React.useState([]);
   const [favCars, setFavCars] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [tab, setTab] = React.useState(0);
@@ -14,6 +15,7 @@ export default function BuyerDashboard({ user, navigate, favorites, onToggleFavo
     Promise.all([
       appointmentsApi.list().then(r => setAppointments(r.data)).catch(() => {}),
       favoritesApi.list().then(r => setFavCars(r.data.map(f => f.car))).catch(() => {}),
+      rentalApi.list().then(r => setRentalRequests(r.data || [])).catch(() => {}),
     ]).finally(() => setLoading(false));
   }, []);
 
@@ -142,8 +144,59 @@ export default function BuyerDashboard({ user, navigate, favorites, onToggleFavo
           </div>
         )}
 
-        {/* Tab 1: Favorites */}
+        {/* Tab 1: Locations */}
         {tab === 1 && (
+          <div>
+            {rentalRequests.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '60px 0' }}>
+                <div style={{ fontSize: 36, marginBottom: 16 }}>🔑</div>
+                <p style={{ fontFamily: C.dm, fontSize: 15, color: C.muted, marginBottom: 20 }}>Aucune demande de location</p>
+                <Btn onClick={() => navigate('catalogue')}>Explorer le catalogue</Btn>
+              </div>
+            ) : rentalRequests.map(r => {
+              const STATUS = { pending: { color: '#eab308', label: 'En attente' }, confirmed: { color: '#22c55e', label: 'Confirmé' }, rejected: { color: '#ef4444', label: 'Refusé' }, cancelled: { color: '#6b7280', label: 'Annulé' }, active: { color: '#3b82f6', label: 'En cours' }, completed: { color: '#a855f7', label: 'Terminé' } };
+              const st = STATUS[r.status] || STATUS.pending;
+              return (
+                <div key={r.id} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 20, marginBottom: 14 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontFamily: C.dm, fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 4 }}>
+                        {r.car?.make} {r.car?.model} {r.car?.year}
+                      </div>
+                      <div style={{ fontFamily: C.dm, fontSize: 13, color: C.muted, marginBottom: 6 }}>
+                        Vendeur : <strong style={{ color: C.text }}>{r.seller_name}</strong>
+                      </div>
+                      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontFamily: C.dm, fontSize: 13, color: C.muted }}>
+                        <span>📅 {r.start_date} → {r.end_date}</span>
+                        <span>⏱ {r.nb_days} jour{r.nb_days > 1 ? 's' : ''}</span>
+                        {r.total_price && <span style={{ color: C.gold, fontWeight: 600 }}>{parseInt(r.total_price).toLocaleString()} FCFA</span>}
+                      </div>
+                      {r.rejection_reason && (
+                        <div style={{ marginTop: 8, fontFamily: C.dm, fontSize: 12, color: '#ef4444' }}>Refus : {r.rejection_reason}</div>
+                      )}
+                      {r.status === 'confirmed' && (
+                        <div style={{ marginTop: 10, background: 'rgba(34,197,94,0.07)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: 10, padding: '10px 14px', fontFamily: C.dm, fontSize: 13, color: '#4ade80' }}>
+                          ✅ Votre location est confirmée. Présentez-vous chez le vendeur avec les documents requis.
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 10 }}>
+                      <span style={{ background: `${st.color}22`, color: st.color, fontFamily: C.dm, fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 20 }}>{st.label}</span>
+                      {r.status === 'pending' && (
+                        <button onClick={async () => { await rentalApi.update(r.id, { status: 'cancelled' }); setRentalRequests(prev => prev.map(x => x.id === r.id ? { ...x, status: 'cancelled' } : x)); }} style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444', fontFamily: C.dm, fontSize: 12, fontWeight: 600, padding: '5px 12px', borderRadius: 8, cursor: 'pointer' }}>
+                          Annuler
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Tab 2: Favorites */}
+        {tab === 2 && (
           <div>
             {favCars.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '60px 0' }}>
@@ -168,8 +221,8 @@ export default function BuyerDashboard({ user, navigate, favorites, onToggleFavo
           </div>
         )}
 
-        {/* Tab 2: Profile */}
-        {tab === 2 && (
+        {/* Tab 3: Profile */}
+        {tab === 3 && (
           <div style={{ maxWidth: 480 }}>
             <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 20, padding: 32 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 28 }}>

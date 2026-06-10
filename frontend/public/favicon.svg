@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Fond circulaire sombre -->
+  <circle cx="32" cy="32" r="32" fill="#09090B"/>
+  <!-- Anneau doré -->
+  <circle cx="32" cy="32" r="30" fill="none" stroke="#C9A96E" stroke-width="2.5"/>
+  <!-- Lettre A -->
+  <text
+    x="16"
+    y="43"
+    font-family="Georgia, serif"
+    font-size="28"
+    font-weight="700"
+    fill="#C9A96E"
+    letter-spacing="-1"
+  >A</text>
+  <!-- Lettre C -->
+  <text
+    x="33"
+    y="43"
+    font-family="Georgia, serif"
+    font-size="28"
+    font-weight="700"
+    fill="#FAFAFA"
+    letter-spacing="-1"
+  >C</text>
+</svg>

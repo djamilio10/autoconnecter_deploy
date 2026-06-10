@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models import Avg
 from users.models import User
 
 
@@ -15,6 +16,7 @@ class Seller(models.Model):
     name = models.CharField(max_length=200)
     seller_type = models.CharField(max_length=20, choices=SELLER_TYPES, default=PRO)
     avatar = models.CharField(max_length=5)
+    logo = models.FileField(upload_to='logos/', blank=True, null=True)
     rating = models.DecimalField(max_digits=3, decimal_places=1, default=0)
     review_count = models.IntegerField(default=0)
     location = models.CharField(max_length=200)
@@ -59,6 +61,15 @@ class Car(models.Model):
         ('Manuelle', 'Manuelle'),
     ]
 
+    LISTING_SALE = 'sale'
+    LISTING_RENTAL = 'rental'
+    LISTING_BOTH = 'both'
+    LISTING_CHOICES = [
+        (LISTING_SALE, 'Vente uniquement'),
+        (LISTING_RENTAL, 'Location uniquement'),
+        (LISTING_BOTH, 'Vente et Location'),
+    ]
+
     seller = models.ForeignKey(Seller, on_delete=models.CASCADE, related_name='cars')
     make = models.CharField(max_length=100)
     model = models.CharField(max_length=100)
@@ -81,6 +92,13 @@ class Car(models.Model):
     image = models.URLField(max_length=500, blank=True)
     image_hero = models.URLField(max_length=500, blank=True)
     is_available = models.BooleanField(default=True)
+    # ── Champs location ──────────────────────────────────────────────────────
+    listing_type = models.CharField(max_length=10, choices=LISTING_CHOICES, default=LISTING_SALE)
+    rental_price_per_day = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    rental_deposit = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    rental_min_days = models.IntegerField(default=1)
+    rental_required_docs = models.JSONField(default=list, blank=True,
+        help_text="Liste des documents exigés (ex: ['Permis de conduire', 'CIN'])")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -181,3 +199,114 @@ class Favorite(models.Model):
     class Meta:
         db_table = 'favorites'
         unique_together = ('user', 'car')
+
+
+class Review(models.Model):
+    reviewer = models.ForeignKey(User, on_delete=models.CASCADE, related_name='reviews_given')
+    seller = models.ForeignKey(Seller, on_delete=models.CASCADE, related_name='reviews')
+    car = models.ForeignKey(Car, on_delete=models.SET_NULL, null=True, blank=True, related_name='reviews')
+    rating = models.IntegerField(default=5)  # 1-5
+    comment = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'reviews'
+        unique_together = ('reviewer', 'seller')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'Review by {self.reviewer} on {self.seller} ({self.rating}★)'
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        # Recalcule rating/review_count du vendeur
+        reviews = self.seller.reviews.all()
+        count = reviews.count()
+        avg = reviews.aggregate(models.Avg('rating'))['rating__avg'] or 0
+        self.seller.rating = round(avg, 1)
+        self.seller.review_count = count
+        self.seller.save(update_fields=['rating', 'review_count'])
+
+
+class Conversation(models.Model):
+    buyer = models.ForeignKey(User, on_delete=models.CASCADE, related_name='conversations')
+    seller = models.ForeignKey(Seller, on_delete=models.CASCADE, related_name='conversations')
+    car = models.ForeignKey(Car, on_delete=models.SET_NULL, null=True, blank=True, related_name='conversations')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'conversations'
+        unique_together = ('buyer', 'seller', 'car')
+        ordering = ['-updated_at']
+
+    def __str__(self):
+        return f'Conv {self.buyer} <-> {self.seller}'
+
+    @property
+    def last_message(self):
+        return self.messages.last()
+
+    @property
+    def unread_count_for_buyer(self):
+        return self.messages.filter(sender=self.seller.user, is_read=False).count()
+
+    @property
+    def unread_count_for_seller(self):
+        return self.messages.filter(is_read=False).exclude(sender=self.seller.user).count()
+
+
+class Message(models.Model):
+    conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name='messages')
+    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='messages_sent')
+    content = models.TextField()
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'messages'
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f'Msg from {self.sender} in conv #{self.conversation_id}'
+
+
+class RentalRequest(models.Model):
+    STATUS_CHOICES = [
+        ('pending',   'En attente'),
+        ('confirmed', 'Confirme'),
+        ('rejected',  'Refuse'),
+        ('cancelled', 'Annule'),
+        ('active',    'En cours'),
+        ('completed', 'Termine'),
+    ]
+
+    car = models.ForeignKey(Car, on_delete=models.CASCADE, related_name='rental_requests')
+    renter = models.ForeignKey(User, on_delete=models.CASCADE, related_name='rental_requests')
+    seller = models.ForeignKey(Seller, on_delete=models.CASCADE, related_name='rental_requests')
+    start_date = models.DateField()
+    end_date = models.DateField()
+    total_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    renter_message = models.TextField(blank=True)
+    rejection_reason = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'rental_requests'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'Location #{self.pk} -- {self.renter} -> {self.car} ({self.start_date} -> {self.end_date})'
+
+    @property
+    def nb_days(self):
+        if self.start_date and self.end_date:
+            return max(1, (self.end_date - self.start_date).days)
+        return 0
+
+    def save(self, *args, **kwargs):
+        if self.car and self.car.rental_price_per_day and self.start_date and self.end_date:
+            self.total_price = self.car.rental_price_per_day * self.nb_days
+        super().save(*args, **kwargs)

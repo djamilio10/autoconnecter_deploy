@@ -9,6 +9,8 @@ import SellerDashboard from './components/SellerDashboard';
 import BuyerDashboard from './components/BuyerDashboard';
 import AdminDashboard from './components/AdminDashboard';
 import Settings from './components/Settings';
+import Messaging from './components/Messaging';
+import RentalRequest from './components/RentalRequest';
 import { favoritesApi, authApi, clearAuth, settingsApi } from './api';
 
 export default function App() {
@@ -124,6 +126,8 @@ export default function App() {
         return <CarDetail carId={params.carId} navigate={navigate} user={user} favorites={favorites} onToggleFavorite={toggleFavorite} />;
       case 'booking':
         return <Booking carId={params.carId} sellerId={params.sellerId} navigate={navigate} user={user} />;
+      case 'rental-request':
+        return <RentalRequest carId={params.carId} navigate={navigate} user={user} />;
       case 'auth':
         return <Auth navigate={navigate} setUser={handleSetUser} initialMode={params.mode} initialType={params.type} />;
       case 'seller-dashboard':
@@ -134,6 +138,8 @@ export default function App() {
         return <AdminDashboard user={user} navigate={navigate} platformSettings={platformSettings} onSettingsChange={setPlatformSettings} />;
       case 'settings':
         return <Settings user={user} setUser={handleSetUser} navigate={navigate} onLogout={handleLogout} />;
+      case 'messaging':
+        return <Messaging user={user} navigate={navigate} />;
       default:
         return <HomePage navigate={navigate} user={user} />;
     }

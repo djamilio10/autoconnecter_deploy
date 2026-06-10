@@ -1,6 +1,6 @@
 import React from 'react';
 import { C, StatusBadge, Spinner, Btn, toCFA, Input } from './Shared';
-import { dashboardApi, appointmentsApi, carsApi, sellersApi } from '../api';
+import { dashboardApi, appointmentsApi, carsApi, sellersApi, rentalApi } from '../api';
 
 // Convertit un File en data URL pour la prévisualisation locale
 const toPreview = (file) => new Promise(res => {
@@ -9,8 +9,8 @@ const toPreview = (file) => new Promise(res => {
   reader.readAsDataURL(file);
 });
 
-const TABS_BASE = ['Vue d\'ensemble', 'Annonces', 'Rendez-vous'];
-const TABS_PREMIUM = ['Vue d\'ensemble', 'Annonces', 'Rendez-vous', 'Abonnement ⭐'];
+const TABS_BASE = ['Vue d\'ensemble', 'Annonces', 'Rendez-vous', 'Locations'];
+const TABS_PREMIUM = ['Vue d\'ensemble', 'Annonces', 'Rendez-vous', 'Locations', 'Abonnement ⭐'];
 
 // ── Listes de choix pour le formulaire d'annonce ──────────────────────────────
 const FUEL_OPTIONS = ['Essence', 'Diesel', 'Hybride', 'Électrique'];
@@ -21,12 +21,14 @@ export default function SellerDashboard({ user, navigate, platformSettings = {} 
   const [data, setData] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [tab, setTab] = React.useState(0);
+  const [rentalRequests, setRentalRequests] = React.useState([]);
   const [showCarForm, setShowCarForm] = React.useState(false);
   const [editingCar, setEditingCar] = React.useState(null);
+  const [showPremiumModal, setShowPremiumModal] = React.useState(false);
 
   const load = () => {
-    dashboardApi.seller()
-      .then(r => setData(r.data))
+    Promise.all([dashboardApi.seller(), rentalApi.list()])
+      .then(([r, rr]) => { setData(r.data); setRentalRequests(rr.data || []); })
       .catch(() => {})
       .finally(() => setLoading(false));
   };
@@ -137,7 +139,16 @@ export default function SellerDashboard({ user, navigate, platformSettings = {} 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
               <h3 style={{ fontFamily: C.playfair, fontSize: 22, color: C.text, margin: 0, fontWeight: 600 }}>Mes annonces ({cars.length})</h3>
               <button
-                onClick={() => { setEditingCar(null); setShowCarForm(true); }}
+                onClick={() => {
+                  const isPremium = data?.seller?.is_premium;
+                  const activeCarsCount = stats.active_cars ?? 0;
+                  if (!isPremium && activeCarsCount >= 3) {
+                    setShowPremiumModal(true);
+                  } else {
+                    setEditingCar(null);
+                    setShowCarForm(true);
+                  }
+                }}
                 style={{
                   background: C.gold, border: 'none', color: C.bg,
                   fontFamily: C.dm, fontSize: 14, fontWeight: 700,
@@ -200,6 +211,15 @@ export default function SellerDashboard({ user, navigate, platformSettings = {} 
             car={editingCar}
             onClose={() => { setShowCarForm(false); setEditingCar(null); }}
             onSaved={onCarSaved}
+            onPremiumRequired={() => setShowPremiumModal(true)}
+          />
+        )}
+
+        {/* Modal — Upgrade Premium */}
+        {showPremiumModal && (
+          <PremiumUpgradeModal
+            onClose={() => setShowPremiumModal(false)}
+            onRequested={() => { setShowPremiumModal(false); load(); }}
           />
         )}
 
@@ -221,7 +241,10 @@ export default function SellerDashboard({ user, navigate, platformSettings = {} 
           </div>
         )}
 
-        {tab === 3 && <PremiumTab seller={data?.seller} onRefresh={load} />}
+        {tab === 3 && (
+          <RentalTab rentalRequests={rentalRequests} onRefresh={load} />
+        )}
+        {tab === 4 && <PremiumTab seller={data?.seller} onRefresh={load} />}
       </div>
     </div>
   );
@@ -318,6 +341,95 @@ function AppointmentRow({ a, onUpdate, showActions }) {
   );
 }
 
+
+// ── Onglet Locations ──────────────────────────────────────────────────────────
+function RentalTab({ rentalRequests, onRefresh }) {
+  const [updating, setUpdating] = React.useState(null);
+  const [rejReason, setRejReason] = React.useState('');
+  const [showRejInput, setShowRejInput] = React.useState(null);
+
+  const updateStatus = async (id, status, reason = '') => {
+    setUpdating(id);
+    try {
+      await rentalApi.update(id, { status, rejection_reason: reason });
+      onRefresh();
+    } catch { alert('Erreur lors de la mise a jour.'); }
+    setUpdating(null);
+    setShowRejInput(null);
+  };
+
+  const STATUS_COLORS = {
+    pending: { bg: 'rgba(234,179,8,0.12)', color: '#eab308', label: 'En attente' },
+    confirmed: { bg: 'rgba(34,197,94,0.12)', color: '#22c55e', label: 'Confirme' },
+    rejected: { bg: 'rgba(239,68,68,0.12)', color: '#ef4444', label: 'Refuse' },
+    cancelled: { bg: 'rgba(107,114,128,0.12)', color: '#6b7280', label: 'Annule' },
+    active: { bg: 'rgba(59,130,246,0.12)', color: '#3b82f6', label: 'En cours' },
+    completed: { bg: 'rgba(168,85,247,0.12)', color: '#a855f7', label: 'Termine' },
+  };
+
+  return (
+    <div>
+      <h3 style={{ fontFamily: C.dm, fontSize: 20, fontWeight: 700, color: C.text, marginBottom: 20 }}>
+        Demandes de location ({rentalRequests.length})
+      </h3>
+      {rentalRequests.length === 0 ? (
+        <div style={{ fontFamily: C.dm, fontSize: 14, color: C.muted, padding: '40px 0', textAlign: 'center' }}>Aucune demande de location pour l'instant.</div>
+      ) : rentalRequests.map(r => {
+        const st = STATUS_COLORS[r.status] || STATUS_COLORS.pending;
+        return (
+          <div key={r.id} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 20, marginBottom: 14 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontFamily: C.dm, fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 4 }}>
+                  {r.car?.make} {r.car?.model} {r.car?.year}
+                </div>
+                <div style={{ fontFamily: C.dm, fontSize: 13, color: C.muted, marginBottom: 8 }}>
+                  Demandeur : <strong style={{ color: C.text }}>{r.renter_name}</strong>
+                </div>
+                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontFamily: C.dm, fontSize: 13, color: C.muted }}>
+                  <span>📅 {r.start_date} → {r.end_date}</span>
+                  <span>⏱ {r.nb_days} jour{r.nb_days > 1 ? 's' : ''}</span>
+                  {r.total_price && <span style={{ color: C.gold, fontWeight: 600 }}>{parseInt(r.total_price).toLocaleString()} FCFA</span>}
+                </div>
+                {r.renter_message && (
+                  <div style={{ marginTop: 10, fontFamily: C.dm, fontSize: 13, color: C.muted, fontStyle: 'italic', background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: '8px 12px' }}>
+                    "{r.renter_message}"
+                  </div>
+                )}
+                {r.rejection_reason && (
+                  <div style={{ marginTop: 8, fontFamily: C.dm, fontSize: 12, color: '#ef4444' }}>Raison du refus : {r.rejection_reason}</div>
+                )}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 10 }}>
+                <span style={{ background: st.bg, color: st.color, fontFamily: C.dm, fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 20 }}>{st.label}</span>
+                {r.status === 'pending' && (
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={() => updateStatus(r.id, 'confirmed')} disabled={updating === r.id} style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', color: '#22c55e', fontFamily: C.dm, fontSize: 13, fontWeight: 600, padding: '6px 14px', borderRadius: 8, cursor: 'pointer' }}>
+                      {updating === r.id ? '...' : '✓ Confirmer'}
+                    </button>
+                    <button onClick={() => setShowRejInput(r.id)} disabled={updating === r.id} style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444', fontFamily: C.dm, fontSize: 13, fontWeight: 600, padding: '6px 14px', borderRadius: 8, cursor: 'pointer' }}>
+                      ✗ Refuser
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+            {showRejInput === r.id && (
+              <div style={{ marginTop: 12, borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
+                <input value={rejReason} onChange={e => setRejReason(e.target.value)} placeholder="Raison du refus (optionnel)..." style={{ width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 12px', color: C.text, fontFamily: C.dm, fontSize: 13, marginBottom: 8, boxSizing: 'border-box' }} />
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button onClick={() => updateStatus(r.id, 'rejected', rejReason)} style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444', fontFamily: C.dm, fontSize: 13, fontWeight: 600, padding: '6px 14px', borderRadius: 8, cursor: 'pointer' }}>Confirmer le refus</button>
+                  <button onClick={() => { setShowRejInput(null); setRejReason(''); }} style={{ background: 'none', border: `1px solid ${C.border}`, color: C.muted, fontFamily: C.dm, fontSize: 13, padding: '6px 14px', borderRadius: 8, cursor: 'pointer' }}>Annuler</button>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Onglet Abonnement Premium ─────────────────────────────────────────────────
 function PremiumTab({ seller, onRefresh }) {
   const [requesting, setRequesting] = React.useState(false);
@@ -342,7 +454,6 @@ function PremiumTab({ seller, onRefresh }) {
   };
 
   const BENEFITS_FREE = [
-    { ok: true,  text: '3 annonces actives maximum' },
     { ok: false, text: 'Badge Premium sur vos annonces' },
     { ok: false, text: 'Priorité en tête du catalogue' },
     { ok: false, text: 'Annonces illimitées' },
@@ -391,8 +502,13 @@ function PremiumTab({ seller, onRefresh }) {
             </div>
           )}
           {!isPremium && (
-            <div style={{ fontFamily: C.dm, fontSize: 13, color: C.muted, marginTop: 6 }}>
-              {activeCars} / 3 annonces actives utilisées
+            <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div style={{ fontFamily: C.dm, fontSize: 13, color: C.text, fontWeight: 600 }}>
+                3 annonces autorisées
+              </div>
+              <div style={{ fontFamily: C.dm, fontSize: 13, color: C.muted }}>
+                {activeCars} / 3 annonces actives utilisées
+              </div>
             </div>
           )}
         </div>
@@ -486,8 +602,118 @@ function EmptyState({ icon, text }) {
   );
 }
 
+// ── Modale d'upgrade Premium ──────────────────────────────────────────────────
+function PremiumUpgradeModal({ onClose, onRequested }) {
+  const [loading, setLoading] = React.useState(false);
+  const [done, setDone] = React.useState(false);
+
+  const handleRequest = async () => {
+    setLoading(true);
+    try {
+      await sellersApi.requestPremium();
+      setDone(true);
+      onRequested?.();
+    } catch (e) {
+      alert(e.response?.data?.error || 'Une erreur est survenue.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const PERKS = [
+    'Annonces illimitées',
+    'Badge ⭐ PREMIUM sur toutes vos annonces',
+    'Priorité absolue en tête du catalogue',
+    'Badge "Vendeur Premium" sur votre profil',
+    'Visibilité boostée auprès des acheteurs',
+    'Support prioritaire',
+  ];
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 1000,
+      background: 'rgba(0,0,0,0.88)', backdropFilter: 'blur(14px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+    }}>
+      <div style={{
+        background: C.surface,
+        border: `1px solid rgba(201,169,110,0.35)`,
+        borderRadius: 24, padding: '40px 36px', maxWidth: 480, width: '100%',
+        boxShadow: '0 0 80px rgba(201,169,110,0.12)',
+      }}>
+        {/* Icône */}
+        <div style={{
+          width: 76, height: 76, borderRadius: '50%', margin: '0 auto 24px',
+          background: 'rgba(201,169,110,0.1)', border: '2px solid rgba(201,169,110,0.35)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 34,
+        }}>🔒</div>
+
+        {/* Titre */}
+        <h2 style={{
+          fontFamily: C.playfair, fontSize: 24, fontWeight: 700,
+          color: C.gold, textAlign: 'center', margin: '0 0 10px',
+        }}>Limite atteinte</h2>
+
+        <p style={{
+          fontFamily: C.dm, fontSize: 14, color: C.muted,
+          textAlign: 'center', margin: '0 0 28px', lineHeight: 1.7,
+        }}>
+          Vous avez atteint la limite de <strong style={{ color: C.text }}>3 annonces actives</strong> du plan Gratuit.<br />
+          Passez au <strong style={{ color: C.gold }}>Premium</strong> pour publier sans limite.
+        </p>
+
+        {/* Avantages */}
+        <div style={{
+          background: '#0e0e10', border: `1px solid rgba(201,169,110,0.2)`,
+          borderRadius: 14, padding: '18px 20px', marginBottom: 24,
+          display: 'flex', flexDirection: 'column', gap: 10,
+        }}>
+          {PERKS.map((p, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{
+                width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
+                background: 'rgba(74,222,128,0.15)', border: '1px solid rgba(74,222,128,0.4)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 11, color: '#4ade80',
+              }}>✓</span>
+              <span style={{ fontFamily: C.dm, fontSize: 13, color: C.text }}>{p}</span>
+            </div>
+          ))}
+        </div>
+
+        {done ? (
+          <div style={{
+            background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.3)',
+            borderRadius: 12, padding: '14px', textAlign: 'center',
+            fontFamily: C.dm, fontSize: 14, color: '#4ade80', marginBottom: 16,
+          }}>
+            ✅ Demande envoyée ! L'équipe vous contactera sous 24h.
+          </div>
+        ) : (
+          <button onClick={handleRequest} disabled={loading} style={{
+            width: '100%', padding: '14px',
+            background: loading ? 'rgba(201,169,110,0.4)' : C.gold,
+            border: 'none', color: C.bg, fontFamily: C.dm,
+            fontSize: 15, fontWeight: 700, borderRadius: 12,
+            cursor: loading ? 'not-allowed' : 'pointer', marginBottom: 12,
+          }}>
+            {loading ? 'Envoi...' : '⭐ Demander l\'accès Premium'}
+          </button>
+        )}
+
+        <button onClick={onClose} style={{
+          width: '100%', padding: '12px',
+          background: 'transparent', border: `1px solid ${C.border}`,
+          color: C.muted, fontFamily: C.dm, fontSize: 14,
+          borderRadius: 12, cursor: 'pointer',
+        }}>Fermer</button>
+      </div>
+    </div>
+  );
+}
+
 // ── Formulaire de creation / modification d'annonce ──────────────────────────
-function CarFormModal({ car, onClose, onSaved }) {
+function CarFormModal({ car, onClose, onSaved, onPremiumRequired }) {
   const isEdit = !!car;
   const [form, setForm] = React.useState({
     make: car?.make || '',
@@ -504,6 +730,11 @@ function CarFormModal({ car, onClose, onSaved }) {
     location: car?.location || 'Dakar',
     description: car?.description || '',
     is_available: car?.is_available ?? true,
+    listing_type: car?.listing_type || 'sale',
+    rental_price_per_day: car?.rental_price_per_day || '',
+    rental_deposit: car?.rental_deposit || '',
+    rental_min_days: car?.rental_min_days || 1,
+    rental_required_docs: car?.rental_required_docs ? car.rental_required_docs.join(', ') : '',
   });
 
   // Photos existantes et nouvelles photos
@@ -605,6 +836,12 @@ function CarFormModal({ car, onClose, onSaved }) {
       tags: car?.tags || [],
       image: '',
       image_hero: '',
+      rental_price_per_day: form.rental_price_per_day ? Number(form.rental_price_per_day) : null,
+      rental_deposit: form.rental_deposit ? Number(form.rental_deposit) : null,
+      rental_min_days: Number(form.rental_min_days) || 1,
+      rental_required_docs: form.rental_required_docs
+        ? form.rental_required_docs.split(',').map(s => s.trim()).filter(Boolean)
+        : [],
     };
     try {
       let savedCar;
@@ -643,6 +880,11 @@ function CarFormModal({ car, onClose, onSaved }) {
 
       onSaved();
     } catch (err) {
+      if (err.response?.status === 403 && onPremiumRequired) {
+        onClose();
+        onPremiumRequired();
+        return;
+      }
       const data = err.response?.data;
       if (data?.detail) setApiError(data.detail);
       else if (typeof data === 'object' && data) {
@@ -728,7 +970,30 @@ function CarFormModal({ car, onClose, onSaved }) {
           <Input label="Localisation" value={form.location} onChange={e => set('location', e.target.value)} placeholder="Dakar" error={errors.location} />
           <Input label="Portes" type="number" value={form.doors} onChange={e => set('doors', e.target.value)} />
           <Input label="Places" type="number" value={form.seats} onChange={e => set('seats', e.target.value)} />
+          <div>
+            <label style={labelStyle}>Type d'annonce</label>
+            <select value={form.listing_type} onChange={e => set('listing_type', e.target.value)} style={selectStyle}>
+              <option value="sale">Vente uniquement</option>
+              <option value="rental">Location uniquement</option>
+              <option value="both">Vente et Location</option>
+            </select>
+          </div>
         </div>
+        {(form.listing_type === 'rental' || form.listing_type === 'both') && (
+          <div style={{ marginTop: 16, background: 'rgba(201,169,110,0.05)', border: '1px solid rgba(201,169,110,0.2)', borderRadius: 12, padding: 16 }}>
+            <div style={{ fontFamily: C.dm, fontSize: 12, fontWeight: 700, color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12 }}>Options de location</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <Input label="Prix / jour (FCFA)" type="number" value={form.rental_price_per_day} onChange={e => set('rental_price_per_day', e.target.value)} placeholder="25000" />
+              <Input label="Caution (FCFA)" type="number" value={form.rental_deposit} onChange={e => set('rental_deposit', e.target.value)} placeholder="100000" />
+              <Input label="Durée min. (jours)" type="number" value={form.rental_min_days} onChange={e => set('rental_min_days', e.target.value)} placeholder="1" />
+              <div>
+                <label style={labelStyle}>Documents requis</label>
+                <input value={form.rental_required_docs} onChange={e => set('rental_required_docs', e.target.value)} placeholder="Permis de conduire, CIN, Caution" style={{ width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: '9px 12px', color: C.text, fontFamily: C.dm, fontSize: 13, boxSizing: 'border-box' }} />
+                <div style={{ fontFamily: C.dm, fontSize: 11, color: C.subtle, marginTop: 4 }}>Séparez par des virgules</div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── Upload photos ── */}
         <div style={{ marginTop: 16 }}>

@@ -74,6 +74,8 @@ api.interceptors.response.use(
 // ── Endpoints ───────────────────────────────────────────────────────────────
 export const authApi = {
   register: d => api.post('/auth/register/', d),
+  verifyEmail: d => api.post('/auth/verify-email/', d),
+  resendVerification: email => api.post('/auth/resend-verification/', { email }),
   login: d => api.post('/auth/login/', d),
   logout: () => {
     const refresh = getRefreshToken();
@@ -111,6 +113,25 @@ export const sellersApi = {
   list: () => api.get('/sellers/'),
   detail: id => api.get(`/sellers/${id}/`),
   requestPremium: () => api.post('/sellers/premium/request/'),
+  uploadLogo: (file) => {
+    const fd = new FormData();
+    fd.append('logo', file);
+    return api.post('/sellers/logo/', fd);
+  },
+  reviews: id => api.get(`/sellers/${id}/reviews/`),
+  addReview: (sellerId, d) => api.post(`/sellers/${sellerId}/reviews/`, d),
+};
+
+export const notificationsApi = {
+  list: () => api.get('/auth/notifications/'),
+  markRead: (ids) => api.post('/auth/notifications/read/', { ids: ids || [] }),
+};
+
+export const messagingApi = {
+  conversations: () => api.get('/conversations/'),
+  startConversation: d => api.post('/conversations/', d),
+  messages: convId => api.get(`/conversations/${convId}/messages/`),
+  sendMessage: (convId, content) => api.post(`/conversations/${convId}/messages/`, { content }),
 };
 
 export const appointmentsApi = {
@@ -154,3 +175,11 @@ export const adminApi = {
 };
 
 export default api;
+
+export const rentalApi = {
+  list: () => api.get('/rental-requests/'),
+  create: d => api.post('/rental-requests/', d),
+  detail: id => api.get(`/rental-requests/${id}/`),
+  update: (id, d) => api.patch(`/rental-requests/${id}/`, d),
+  availability: carId => api.get(`/cars/${carId}/availability/`),
+};

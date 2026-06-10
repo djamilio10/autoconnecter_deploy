@@ -1,6 +1,7 @@
 import React from 'react';
 import { C, Btn, Spinner, toCFA } from './Shared';
-import { carsApi } from '../api';
+import { carsApi, messagingApi } from '../api';
+import Reviews from './Reviews';
 
 const REPORT_REASONS = [
   { val: 'fake', label: 'Annonce frauduleuse' },
@@ -20,6 +21,7 @@ export default function CarDetail({ carId, navigate, user, favorites, onToggleFa
   const [reportForm, setReportForm] = React.useState({ reason: '', description: '' });
   const [reportSending, setReportSending] = React.useState(false);
   const [reportDone, setReportDone] = React.useState(false);
+  const [contactLoading, setContactLoading] = React.useState(false);
   const isFav = favorites.includes(carId);
 
   React.useEffect(() => {
@@ -268,17 +270,69 @@ export default function CarDetail({ carId, navigate, user, favorites, onToggleFa
               <div style={{ fontFamily: C.dm, fontSize: 13, color: C.muted, marginBottom: 28 }}>
                 📍 {car.location}
               </div>
+              {/* Vente */}
+              {(car.listing_type === 'sale' || car.listing_type === 'both' || !car.listing_type) && (
+                <Btn
+                  onClick={() => {
+                    if (!user) { navigate('auth', { mode: 'login' }); return; }
+                    navigate('booking', { carId: car.id, sellerId: seller?.id });
+                  }}
+                  style={{ width: '100%', fontSize: 15, padding: '14px', marginBottom: 10 }}
+                >
+                  Réserver un essai
+                </Btn>
+              )}
+              {/* Location */}
+              {(car.listing_type === 'rental' || car.listing_type === 'both') && (
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 6 }}>
+                    <span style={{ fontFamily: C.dm, fontSize: 22, fontWeight: 800, color: C.gold }}>
+                      {car.rental_price_per_day ? parseInt(car.rental_price_per_day).toLocaleString() : '—'}
+                    </span>
+                    <span style={{ fontFamily: C.dm, fontSize: 13, color: C.muted }}>FCFA / jour</span>
+                  </div>
+                  {car.rental_deposit && (
+                    <div style={{ fontFamily: C.dm, fontSize: 12, color: C.muted, marginBottom: 8 }}>
+                      Caution : {parseInt(car.rental_deposit).toLocaleString()} FCFA
+                    </div>
+                  )}
+                  {car.rental_required_docs?.length > 0 && (
+                    <div style={{ background: 'rgba(201,169,110,0.06)', border: '1px solid rgba(201,169,110,0.25)', borderRadius: 10, padding: '10px 12px', marginBottom: 10 }}>
+                      <div style={{ fontFamily: C.dm, fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6 }}>Documents requis</div>
+                      {car.rental_required_docs.map((doc, i) => (
+                        <div key={i} style={{ fontFamily: C.dm, fontSize: 12, color: C.muted, display: 'flex', gap: 6, marginBottom: 2 }}>
+                          <span style={{ color: C.gold }}>•</span> {doc}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <Btn
+                    onClick={() => {
+                      if (!user) { navigate('auth', { mode: 'login' }); return; }
+                      navigate('rental-request', { carId: car.id });
+                    }}
+                    style={{ width: '100%', fontSize: 15, padding: '14px' }}
+                  >
+                    🔑 Louer cette voiture
+                  </Btn>
+                </div>
+              )}
               <Btn
-                onClick={() => {
+                variant="secondary"
+                style={{ width: '100%', fontSize: 14, padding: '12px' }}
+                onClick={async () => {
                   if (!user) { navigate('auth', { mode: 'login' }); return; }
-                  navigate('booking', { carId: car.id, sellerId: seller?.id });
+                  if (user.user_type !== 'buyer') return;
+                  setContactLoading(true);
+                  try {
+                    await messagingApi.startConversation({ seller_id: seller.id, car_id: car.id });
+                    navigate('messaging');
+                  } catch { /* ignore */ }
+                  setContactLoading(false);
                 }}
-                style={{ width: '100%', fontSize: 15, padding: '14px', marginBottom: 10 }}
+                disabled={contactLoading}
               >
-                Réserver un essai
-              </Btn>
-              <Btn variant="secondary" style={{ width: '100%', fontSize: 14, padding: '12px' }}>
-                Contacter le vendeur
+                {contactLoading ? 'Ouverture...' : '💬 Contacter le vendeur'}
               </Btn>
               {user && user.user_type === 'buyer' && (
                 <button
@@ -304,7 +358,12 @@ export default function CarDetail({ carId, navigate, user, favorites, onToggleFa
                     width: 48, height: 48, borderRadius: '50%', background: '#27272A',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     fontFamily: C.dm, fontSize: 14, fontWeight: 700, color: C.muted, flexShrink: 0,
-                  }}>{seller.avatar}</div>
+                    overflow: 'hidden',
+                  }}>
+                  {seller.logo_url
+                    ? <img src={seller.logo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    : seller.avatar}
+                </div>
                   <div>
                     <div style={{ fontFamily: C.dm, fontSize: 15, fontWeight: 600, color: C.text }}>
                       {seller.name}
@@ -328,6 +387,11 @@ export default function CarDetail({ carId, navigate, user, favorites, onToggleFa
               </div>
             )}
           </div>
+
+          {/* Section avis */}
+          {seller && (
+            <Reviews sellerId={seller.id} carId={car.id} user={user} />
+          )}
         </div>
       </div>
     </div>

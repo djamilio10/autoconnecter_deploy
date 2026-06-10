@@ -10,8 +10,8 @@ phone_validator = RegexValidator(
 )
 
 id_card_validator = RegexValidator(
-    regex=r'^\d{13}$',
-    message="Le numero de CNI doit contenir exactement 13 chiffres.",
+    regex=r'^[12]\d{12}$|^[12]\d{16}$',
+    message="CNI invalide : 13 ou 17 chiffres, commencant par 1 (homme) ou 2 (femme).",
 )
 
 
@@ -26,9 +26,8 @@ class User(AbstractUser):
     company = models.CharField(max_length=200, blank=True)
     phone = models.CharField(max_length=20, validators=[phone_validator])
     id_card_number = models.CharField(
-        max_length=13,
-        unique=True,
-        null=True,  # null=True pour permettre la migration des comptes existants
+        max_length=17,
+        null=True,
         blank=False,
         validators=[id_card_validator],
         verbose_name="Numero CNI",
@@ -68,6 +67,21 @@ class User(AbstractUser):
         return 'active'
 
 
+class EmailVerification(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='verifications')
+    code = models.CharField(max_length=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    is_used = models.BooleanField(default=False)
+
+    class Meta:
+        db_table = 'email_verifications'
+
+    def is_valid(self):
+        from django.utils import timezone
+        return not self.is_used and self.expires_at > timezone.now()
+
+
 class PlatformSettings(models.Model):
     premium_enabled = models.BooleanField(default=False)
     updated_at = models.DateTimeField(auto_now=True)
@@ -80,6 +94,31 @@ class PlatformSettings(models.Model):
     def get(cls):
         obj, _ = cls.objects.get_or_create(pk=1)
         return obj
+
+
+class Notification(models.Model):
+    TYPE_CHOICES = [
+        ('appointment_new',       'Nouveau rendez-vous'),
+        ('appointment_confirmed', 'Rendez-vous confirmé'),
+        ('appointment_cancelled', 'Rendez-vous annulé'),
+        ('appointment_completed', 'Rendez-vous terminé'),
+        ('new_review',            'Nouvel avis'),
+        ('new_message',           'Nouveau message'),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
+    type = models.CharField(max_length=30, choices=TYPE_CHOICES)
+    message = models.TextField()
+    data = models.JSONField(default=dict, blank=True)
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'notifications'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'Notif {self.type} → {self.user}'
 
 
 class AuditLog(models.Model):
