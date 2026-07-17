@@ -41,6 +41,11 @@ class User(AbstractUser):
     avatar_initials = models.CharField(max_length=3, blank=True)
     rating = models.DecimalField(max_digits=3, decimal_places=1, default=0)
     review_count = models.IntegerField(default=0)
+    # 2FA TOTP (application d'authentification : Google Authenticator, Authy…).
+    # totp_secret reste vide tant que l'utilisateur n'a pas commencé l'enrôlement ;
+    # totp_enabled ne passe à True qu'après vérification d'un premier code valide.
+    totp_secret = models.CharField(max_length=64, blank=True)
+    totp_enabled = models.BooleanField(default=False)
 
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username']
@@ -68,18 +73,56 @@ class User(AbstractUser):
 
 
 class EmailVerification(models.Model):
+    MAX_ATTEMPTS = 5
+
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='verifications')
     code = models.CharField(max_length=6)
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField()
     is_used = models.BooleanField(default=False)
+    attempts = models.PositiveSmallIntegerField(default=0)
 
     class Meta:
         db_table = 'email_verifications'
+        indexes = [
+            models.Index(fields=['user', 'is_used', '-created_at']),
+        ]
 
     def is_valid(self):
         from django.utils import timezone
-        return not self.is_used and self.expires_at > timezone.now()
+        return (
+            not self.is_used
+            and self.attempts < self.MAX_ATTEMPTS
+            and self.expires_at > timezone.now()
+        )
+
+
+class PasswordReset(models.Model):
+    """Code de réinitialisation de mot de passe envoyé par email.
+    Même modèle de sécurité que EmailVerification : code 6 chiffres, expiration
+    courte, cap de tentatives anti-brute-force."""
+    MAX_ATTEMPTS = 5
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='password_resets')
+    code = models.CharField(max_length=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    is_used = models.BooleanField(default=False)
+    attempts = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        db_table = 'password_resets'
+        indexes = [
+            models.Index(fields=['user', 'is_used', '-created_at']),
+        ]
+
+    def is_valid(self):
+        from django.utils import timezone
+        return (
+            not self.is_used
+            and self.attempts < self.MAX_ATTEMPTS
+            and self.expires_at > timezone.now()
+        )
 
 
 class PlatformSettings(models.Model):
@@ -104,6 +147,8 @@ class Notification(models.Model):
         ('appointment_completed', 'Rendez-vous terminé'),
         ('new_review',            'Nouvel avis'),
         ('new_message',           'Nouveau message'),
+        ('rental_request',        'Demande de location'),
+        ('rental_update',         'Mise à jour location'),
     ]
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
@@ -116,6 +161,11 @@ class Notification(models.Model):
     class Meta:
         db_table = 'notifications'
         ordering = ['-created_at']
+        indexes = [
+            # Cloche de notifications : poll toutes les 30 s, filtre user + tri date.
+            models.Index(fields=['user', '-created_at']),
+            models.Index(fields=['user', 'is_read']),
+        ]
 
     def __str__(self):
         return f'Notif {self.type} → {self.user}'

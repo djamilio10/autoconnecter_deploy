@@ -126,13 +126,23 @@ export const NotificationBell = ({ user, navigate }) => {
 
   const load = React.useCallback(() => {
     if (!user) return;
+    // Ne pas interroger le serveur si l'onglet est en arrière-plan : la plupart
+    // des onglets ouverts ne sont pas visibles → grosse économie de charge serveur
+    // à l'échelle (sinon chaque client génère une requête fixe toutes les 60 s).
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
     notificationsApi.list().then(r => setNotifs(r.data || [])).catch(() => {});
   }, [user]);
 
   React.useEffect(() => {
     load();
-    const id = setInterval(load, 30000); // poll toutes les 30s
-    return () => clearInterval(id);
+    const id = setInterval(load, 60000); // poll toutes les 60s (onglet visible uniquement)
+    // Rafraîchit immédiatement quand l'utilisateur revient sur l'onglet.
+    const onVisible = () => { if (document.visibilityState === 'visible') load(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [load]);
 
   React.useEffect(() => {
@@ -654,5 +664,82 @@ export const Spinner = () => (
       animation: 'spin 0.8s linear infinite',
     }} />
     <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+  </div>
+);
+
+// ── Conditions Générales d'Utilisation — Abonnement Premium ───────────────────
+// Doit rester cohérent avec la version backend (settings.PREMIUM_CGU_VERSION).
+export const CGU_PREMIUM_VERSION = 'v1 — juin 2026';
+export const CGU_PREMIUM = [
+  ['1. Objet', "Les présentes conditions régissent l'abonnement « Premium » proposé par AUTOCONNECT aux vendeurs inscrits sur la plateforme. En cochant la case d'acceptation et en procédant au paiement, le vendeur reconnaît avoir lu et accepté l'intégralité des présentes conditions."],
+  ['2. Avantages Premium', "L'abonnement Premium donne droit, pendant sa période de validité : à la publication d'annonces en nombre illimité ; à l'affichage du badge « ⭐ Premium » sur les annonces et le profil ; à la priorité d'affichage en tête du catalogue ; à une visibilité renforcée et au support prioritaire."],
+  ['3. Prix', "L'abonnement est de 5 000 FCFA par mois, payable d'avance. Les prix s'entendent toutes taxes comprises."],
+  ['4. Paiement', "Les paiements sont opérés exclusivement via le prestataire PayTech (carte bancaire Visa/Mastercard ou mobile money : Orange Money, Wave, Free Money, etc.). AUTOCONNECT ne collecte ni ne conserve aucune donnée de carte bancaire : ces données sont traitées par PayTech. Le Premium est activé dès la confirmation du paiement par PayTech."],
+  ['5. Durée et renouvellement', "L'abonnement est conclu pour une durée déterminée d'un (1) mois à compter de la confirmation du paiement. Il n'existe aucun prélèvement automatique : le renouvellement nécessite une nouvelle action de paiement volontaire du vendeur. Un email de rappel est envoyé un (1) jour avant l'échéance. En cas de renouvellement effectué avant l'échéance, la nouvelle période d'un mois s'ajoute à la date d'expiration en cours (aucun jour payé n'est perdu)."],
+  ['6. Non-renouvellement et délai de grâce', "À défaut de renouvellement à l'échéance, un délai de grâce de deux (2) jours est accordé, durant lequel les avantages Premium restent actifs. Passé ce délai sans paiement, le compte repasse automatiquement en formule Gratuite et perd l'ensemble des avantages Premium."],
+  ['7. Retour en formule Gratuite', "En formule Gratuite, le vendeur est limité à trois (3) annonces actives. Les annonces publiées au-delà de cette limite pendant la période Premium restent visibles, mais aucune nouvelle annonce ne peut être publiée tant que le nombre d'annonces actives dépasse la limite gratuite ou que l'abonnement Premium n'a pas été réactivé. Le droit aux annonces gratuites s'applique de nouveau dans la limite ci-dessus."],
+  ['8. Résiliation', "Le vendeur peut cesser de renouveler son abonnement à tout moment, sans frais ni préavis : il lui suffit de ne pas effectuer de nouveau paiement. Aucun engagement de durée n'est imposé au-delà du mois en cours."],
+  ['9. Remboursement', "Les sommes versées au titre d'un mois entamé ne sont pas remboursables, sauf erreur technique avérée imputable à AUTOCONNECT ou à PayTech."],
+  ['10. Données personnelles', "L'adresse email du vendeur est utilisée pour l'envoi des rappels d'échéance, confirmations de paiement et avis liés à l'abonnement."],
+  ['11. Disponibilité', "AUTOCONNECT met en œuvre les moyens raisonnables pour assurer la continuité du service mais ne saurait être tenue responsable d'une indisponibilité due au prestataire de paiement ou à un cas de force majeure."],
+  ['12. Modification', "AUTOCONNECT peut faire évoluer les présentes conditions ; la version applicable est celle acceptée lors du paiement."],
+  ['13. Droit applicable', "Les présentes conditions sont régies par le droit sénégalais. Tout litige relève des juridictions compétentes de Dakar."],
+];
+
+// Pop-up affichant les CGU Premium en entier.
+export const CGUModal = ({ onClose }) => (
+  <div
+    onClick={onClose}
+    style={{
+      position: 'fixed', inset: 0, zIndex: 1100,
+      background: 'rgba(0,0,0,0.88)', backdropFilter: 'blur(10px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+    }}
+  >
+    <div
+      onClick={e => e.stopPropagation()}
+      style={{
+        background: C.surface, border: `1px solid ${C.goldBorder}`, borderRadius: 20,
+        maxWidth: 640, width: '100%', maxHeight: '85vh', display: 'flex', flexDirection: 'column',
+        boxShadow: '0 0 80px rgba(201,169,110,0.12)',
+      }}
+    >
+      <div style={{
+        padding: '24px 28px', borderBottom: `1px solid ${C.border}`,
+        display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16,
+      }}>
+        <div>
+          <h2 style={{ fontFamily: C.playfair, fontSize: 22, fontWeight: 700, color: C.gold, margin: 0 }}>
+            Conditions Générales d'Utilisation
+          </h2>
+          <div style={{ fontFamily: C.dm, fontSize: 12, color: C.muted, marginTop: 4 }}>
+            Abonnement Premium · {CGU_PREMIUM_VERSION}
+          </div>
+        </div>
+        <button onClick={onClose} aria-label="Fermer" style={{
+          background: 'none', border: 'none', color: C.muted, fontSize: 26,
+          cursor: 'pointer', lineHeight: 1, padding: 0,
+        }}>×</button>
+      </div>
+      <div style={{ padding: '24px 28px', overflowY: 'auto' }}>
+        {CGU_PREMIUM.map(([title, body], i) => (
+          <div key={i} style={{ marginBottom: 18 }}>
+            <h3 style={{ fontFamily: C.dm, fontSize: 14, fontWeight: 700, color: C.text, margin: '0 0 6px' }}>
+              {title}
+            </h3>
+            <p style={{ fontFamily: C.dm, fontSize: 13.5, color: C.muted, lineHeight: 1.7, margin: 0 }}>
+              {body}
+            </p>
+          </div>
+        ))}
+      </div>
+      <div style={{ padding: '16px 28px', borderTop: `1px solid ${C.border}`, textAlign: 'right' }}>
+        <button onClick={onClose} style={{
+          background: C.goldDim, border: `1px solid ${C.goldBorder}`, color: C.gold,
+          fontFamily: C.dm, fontSize: 14, fontWeight: 700, padding: '10px 24px',
+          borderRadius: 10, cursor: 'pointer',
+        }}>Fermer</button>
+      </div>
+    </div>
   </div>
 );

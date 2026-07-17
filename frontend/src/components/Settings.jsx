@@ -193,11 +193,10 @@ function ProfileSection({ user, setUser }) {
   );
 }
 
-function SecuritySection({ onLogout }) {
+function SecuritySection({ onLogout, user, setUser }) {
   const [pwd, setPwd] = React.useState({ old: '', new: '', confirm: '' });
   const [loading, setLoading] = React.useState(false);
   const [msg, setMsg] = React.useState(null);
-  const [twoFA, setTwoFA] = React.useState(() => localStorage.getItem('ac_2fa') === 'true');
 
   const changePassword = async () => {
     if (pwd.new !== pwd.confirm) { setMsg({ type: 'error', text: 'Les nouveaux mots de passe ne correspondent pas.' }); return; }
@@ -210,12 +209,6 @@ function SecuritySection({ onLogout }) {
     } catch (e) {
       setMsg({ type: 'error', text: e.response?.data?.error || 'Échec du changement de mot de passe.' });
     } finally { setLoading(false); }
-  };
-
-  const toggle2FA = () => {
-    const next = !twoFA;
-    setTwoFA(next);
-    localStorage.setItem('ac_2fa', String(next));
   };
 
   return (
@@ -237,21 +230,7 @@ function SecuritySection({ onLogout }) {
       <div style={{ height: 1, background: C.border2, margin: '8px 0 24px' }} />
 
       {/* 2FA */}
-      <PrefRow
-        label="Authentification à deux facteurs (2FA)"
-        sub={twoFA ? "Activée — une vérification supplémentaire est demandée à chaque connexion" : "Désactivée — activez pour renforcer la sécurité de votre compte"}
-        checked={twoFA}
-        onChange={toggle2FA}
-      />
-      {twoFA && (
-        <div style={{
-          marginTop: 12, background: 'rgba(201,169,110,0.07)', border: `1px solid ${C.goldBorder}`,
-          borderRadius: 10, padding: '12px 16px',
-          fontFamily: C.dm, fontSize: 13, color: C.muted, lineHeight: 1.6,
-        }}>
-          La 2FA par SMS sera envoyée au numéro enregistré sur votre compte à chaque connexion.
-        </div>
-      )}
+      <TwoFactorRow user={user} setUser={setUser} />
 
       <div style={{ height: 1, background: C.border2, margin: '24px 0' }} />
 
@@ -268,6 +247,166 @@ function SecuritySection({ onLogout }) {
         }}>↪ Se déconnecter de tous les appareils</button>
       </div>
     </Section>
+  );
+}
+
+// ── Authentification à deux facteurs (TOTP / application d'authentification) ──
+function TwoFactorRow({ user, setUser }) {
+  const enabled = !!user?.two_factor_enabled;
+  const [setup, setSetup] = React.useState(null);   // {secret, otpauth_url, qr}
+  const [mode, setMode] = React.useState(null);     // 'enroll' | 'disable'
+  const [code, setCode] = React.useState('');
+  const [busy, setBusy] = React.useState(false);
+  const [msg, setMsg] = React.useState(null);
+
+  const syncUser = (twoFAEnabled) => {
+    const next = { ...user, two_factor_enabled: twoFAEnabled };
+    setUser(next);
+    localStorage.setItem('user', JSON.stringify(next));
+  };
+
+  const startEnroll = async () => {
+    setBusy(true); setMsg(null);
+    try {
+      const r = await authApi.twoFactorSetup();
+      setSetup(r.data); setMode('enroll'); setCode('');
+    } catch (e) {
+      setMsg({ type: 'error', text: e.response?.data?.detail || 'Impossible de démarrer l\'activation.' });
+    } finally { setBusy(false); }
+  };
+
+  const confirmEnroll = async () => {
+    setBusy(true); setMsg(null);
+    try {
+      await authApi.twoFactorEnable(code.trim());
+      syncUser(true);
+      setSetup(null); setMode(null); setCode('');
+      setMsg({ type: 'success', text: '2FA activée. Un code vous sera demandé à chaque connexion.' });
+    } catch (e) {
+      setMsg({ type: 'error', text: e.response?.data?.detail || 'Code invalide.' });
+    } finally { setBusy(false); }
+  };
+
+  const confirmDisable = async () => {
+    setBusy(true); setMsg(null);
+    try {
+      await authApi.twoFactorDisable(code.trim());
+      syncUser(false);
+      setMode(null); setCode('');
+      setMsg({ type: 'success', text: '2FA désactivée.' });
+    } catch (e) {
+      setMsg({ type: 'error', text: e.response?.data?.detail || 'Code invalide.' });
+    } finally { setBusy(false); }
+  };
+
+  const cancel = () => { setSetup(null); setMode(null); setCode(''); setMsg(null); };
+
+  const codeInput = (onValidate, label) => (
+    <div style={{ marginTop: 16 }}>
+      <input
+        value={code}
+        onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+        placeholder="Code à 6 chiffres"
+        inputMode="numeric"
+        autoFocus
+        style={{
+          width: '100%', boxSizing: 'border-box', background: C.bg, border: `1px solid ${C.border}`,
+          color: C.text, fontFamily: C.dm, fontSize: 18, letterSpacing: '0.3em',
+          textAlign: 'center', padding: '12px 14px', borderRadius: 10, outline: 'none',
+        }}
+      />
+      <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
+        <button onClick={onValidate} disabled={busy || code.length !== 6} style={{
+          flex: 1, padding: '11px', background: (busy || code.length !== 6) ? 'rgba(201,169,110,0.35)' : C.gold,
+          border: 'none', color: C.bg, fontFamily: C.dm, fontSize: 14, fontWeight: 700,
+          borderRadius: 10, cursor: (busy || code.length !== 6) ? 'not-allowed' : 'pointer',
+        }}>{busy ? '...' : label}</button>
+        <button onClick={cancel} style={{
+          padding: '11px 18px', background: 'transparent', border: `1px solid ${C.border}`,
+          color: C.muted, fontFamily: C.dm, fontSize: 14, borderRadius: 10, cursor: 'pointer',
+        }}>Annuler</button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ padding: '16px 0', borderBottom: `1px solid ${C.border2}` }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}>
+        <div>
+          <div style={{ fontFamily: C.dm, fontSize: 14, color: C.text, fontWeight: 500 }}>
+            Authentification à deux facteurs (2FA)
+          </div>
+          <div style={{ fontFamily: C.dm, fontSize: 12, color: C.muted, marginTop: 3 }}>
+            {enabled
+              ? 'Activée — un code de votre application d\'authentification est demandé à chaque connexion'
+              : 'Désactivée — protégez votre compte avec une application d\'authentification'}
+          </div>
+        </div>
+        {!mode && (
+          enabled ? (
+            <button onClick={() => { setMode('disable'); setCode(''); setMsg(null); }} style={{
+              background: 'rgba(224,92,92,0.08)', border: '1px solid rgba(224,92,92,0.3)',
+              color: '#f87171', fontFamily: C.dm, fontSize: 13, fontWeight: 600,
+              padding: '8px 16px', borderRadius: 10, cursor: 'pointer', flexShrink: 0,
+            }}>Désactiver</button>
+          ) : (
+            <button onClick={startEnroll} disabled={busy} style={{
+              background: C.goldDim, border: `1px solid ${C.goldBorder}`,
+              color: C.gold, fontFamily: C.dm, fontSize: 13, fontWeight: 600,
+              padding: '8px 16px', borderRadius: 10, cursor: busy ? 'not-allowed' : 'pointer', flexShrink: 0,
+            }}>{busy ? '...' : 'Activer'}</button>
+          )
+        )}
+      </div>
+
+      {msg && (
+        <div style={{
+          marginTop: 12, borderRadius: 10, padding: '10px 14px', fontFamily: C.dm, fontSize: 13,
+          background: msg.type === 'success' ? 'rgba(74,222,128,0.1)' : 'rgba(224,92,92,0.1)',
+          border: `1px solid ${msg.type === 'success' ? 'rgba(74,222,128,0.3)' : 'rgba(224,92,92,0.3)'}`,
+          color: msg.type === 'success' ? '#4ade80' : '#f87171',
+        }}>{msg.text}</div>
+      )}
+
+      {/* Enrôlement : QR à scanner + saisie du code */}
+      {mode === 'enroll' && setup && (
+        <div style={{
+          marginTop: 14, background: 'rgba(201,169,110,0.06)', border: `1px solid ${C.goldBorder}`,
+          borderRadius: 12, padding: 20,
+        }}>
+          <div style={{ fontFamily: C.dm, fontSize: 13, color: C.text, lineHeight: 1.6, marginBottom: 14 }}>
+            1. Scannez ce QR code avec <strong>Google Authenticator</strong>, Authy ou Microsoft Authenticator.<br />
+            2. Saisissez le code à 6 chiffres affiché par l'application pour confirmer.
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
+            <img src={setup.qr} alt="QR code 2FA" width={200} height={200}
+                 style={{ borderRadius: 12, background: '#fff', padding: 8 }} />
+          </div>
+          <div style={{ fontFamily: C.dm, fontSize: 12, color: C.muted, textAlign: 'center', marginBottom: 4 }}>
+            Saisie manuelle (si le scan échoue) :
+          </div>
+          <div style={{
+            fontFamily: 'monospace', fontSize: 13, color: C.gold, textAlign: 'center',
+            wordBreak: 'break-all', background: C.bg, border: `1px solid ${C.border}`,
+            borderRadius: 8, padding: '8px 12px',
+          }}>{setup.secret}</div>
+          {codeInput(confirmEnroll, 'Confirmer l\'activation')}
+        </div>
+      )}
+
+      {/* Désactivation : confirmation par code */}
+      {mode === 'disable' && (
+        <div style={{
+          marginTop: 14, background: 'rgba(224,92,92,0.05)', border: '1px solid rgba(224,92,92,0.25)',
+          borderRadius: 12, padding: 20,
+        }}>
+          <div style={{ fontFamily: C.dm, fontSize: 13, color: C.muted, lineHeight: 1.6 }}>
+            Pour désactiver la 2FA, saisissez un code de votre application d'authentification.
+          </div>
+          {codeInput(confirmDisable, 'Désactiver la 2FA')}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -458,7 +597,7 @@ export default function Settings({ user, setUser, navigate, onLogout }) {
           {/* Content */}
           <div>
             {active === 'profile'       && <ProfileSection user={user} setUser={setUser} />}
-            {active === 'security'      && <SecuritySection onLogout={onLogout} />}
+            {active === 'security'      && <SecuritySection onLogout={onLogout} user={user} setUser={setUser} />}
             {active === 'notifications' && <NotificationsSection />}
             {active === 'privacy'       && <PrivacySection />}
           </div>

@@ -1,21 +1,42 @@
+import hashlib
+import hmac
+import json
+import logging
+import uuid
+
+import requests
+from django_ratelimit.decorators import ratelimit
 from rest_framework import status, filters
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny, IsAuthenticatedOrReadOnly
 from rest_framework.response import Response
+from django.conf import settings
 from django.db.models import Q
-from .models import Car, CarImage, Seller, Appointment, Favorite, Report, Review, Conversation, Message, RentalRequest
+from django.utils import timezone
+from .models import (Car, CarImage, Seller, Appointment, Favorite, Report, Review,
+                     Conversation, Message, RentalRequest, PremiumPayment)
 from .serializers import (CarSerializer, CarImageSerializer, SellerSerializer, AppointmentSerializer,
                           FavoriteSerializer, ReviewSerializer, ConversationSerializer, MessageSerializer,
                           RentalRequestSerializer)
-from users.models import PlatformSettings, Notification
+from users.models import PlatformSettings, Notification, AuditLog
+
+logger = logging.getLogger(__name__)
 
 
 # ── Cars ──────────────────────────────────────────────────────────────────────
 
+def _favorited_ids(request):
+    """Ensemble des car_id favoris de l'utilisateur (1 requête) pour éviter le N+1
+    dans CarSerializer.get_is_favorited."""
+    if request.user.is_authenticated:
+        return set(Favorite.objects.filter(user=request.user).values_list('car_id', flat=True))
+    return set()
+
+
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def car_list(request):
-    cars = Car.objects.filter(is_available=True).select_related('seller')
+    cars = Car.objects.filter(is_available=True).select_related('seller').prefetch_related('car_images')
 
     q = request.query_params.get('q', '')
     if q:
@@ -56,7 +77,8 @@ def car_list(request):
     else:
         cars = cars.order_by('-seller__is_premium' if premium_on else '-created_at', '-created_at')
 
-    serializer = CarSerializer(cars, many=True, context={'request': request})
+    ctx = {'request': request, 'favorited_ids': _favorited_ids(request)}
+    serializer = CarSerializer(cars, many=True, context=ctx)
     return Response(serializer.data)
 
 
@@ -64,10 +86,11 @@ def car_list(request):
 @permission_classes([AllowAny])
 def car_detail(request, pk):
     try:
-        car = Car.objects.select_related('seller').get(pk=pk)
+        car = Car.objects.select_related('seller').prefetch_related('car_images').get(pk=pk)
     except Car.DoesNotExist:
         return Response({'error': 'Voiture introuvable'}, status=status.HTTP_404_NOT_FOUND)
-    return Response(CarSerializer(car, context={'request': request}).data)
+    ctx = {'request': request, 'favorited_ids': _favorited_ids(request)}
+    return Response(CarSerializer(car, context=ctx).data)
 
 
 @api_view(['POST'])
@@ -126,8 +149,15 @@ def car_update(request, pk):
         car.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+    # Anti-mass-assignment (OWASP A01/A08) : seller_id est writable dans le serializer.
+    # On le force à la valeur actuelle pour empêcher un vendeur de réassigner sa voiture
+    # à un autre vendeur (ce qui permettrait de polluer/faire bannir le profil d'un tiers).
+    # Re-injecter (plutôt que supprimer) garde le PUT non-partiel valide.
+    data = request.data.copy() if hasattr(request.data, 'copy') else dict(request.data)
+    data['seller_id'] = car.seller_id
+
     partial = request.method == 'PATCH'
-    serializer = CarSerializer(car, data=request.data, partial=partial, context={'request': request})
+    serializer = CarSerializer(car, data=data, partial=partial, context={'request': request})
     if serializer.is_valid():
         serializer.save()
         return Response(serializer.data)
@@ -163,12 +193,17 @@ def appointment_list(request):
         if user.user_type == 'seller':
             try:
                 seller = user.seller_profile
-                appointments = Appointment.objects.filter(seller=seller).select_related('car', 'buyer')
+                appointments = (Appointment.objects.filter(seller=seller)
+                                .select_related('car', 'car__seller', 'buyer', 'seller')
+                                .prefetch_related('car__car_images'))
             except Exception:
                 appointments = Appointment.objects.none()
         else:
-            appointments = Appointment.objects.filter(buyer=user).select_related('car', 'car__seller')
-        return Response(AppointmentSerializer(appointments, many=True).data)
+            appointments = (Appointment.objects.filter(buyer=user)
+                            .select_related('car', 'car__seller', 'buyer', 'seller')
+                            .prefetch_related('car__car_images'))
+        ctx = {'request': request, 'favorited_ids': _favorited_ids(request)}
+        return Response(AppointmentSerializer(appointments, many=True, context=ctx).data)
 
     serializer = AppointmentSerializer(data=request.data, context={'request': request})
     if serializer.is_valid():
@@ -198,7 +233,9 @@ def appointment_update(request, pk):
     except Appointment.DoesNotExist:
         return Response({'error': 'Non autorisé'}, status=status.HTTP_404_NOT_FOUND)
 
-    serializer = AppointmentSerializer(appointment, data=request.data, partial=True)
+    serializer = AppointmentSerializer(
+        appointment, data=request.data, partial=True, context={'request': request}
+    )
     if serializer.is_valid():
         old_status = appointment.status
         updated = serializer.save()
@@ -230,8 +267,14 @@ def appointment_update(request, pk):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def favorites_list(request):
-    favs = Favorite.objects.filter(user=request.user).select_related('car', 'car__seller')
-    return Response(FavoriteSerializer(favs, many=True).data)
+    favs = (
+        Favorite.objects.filter(user=request.user)
+        .select_related('car', 'car__seller')
+        .prefetch_related('car__car_images')
+    )
+    # Toutes les voitures listées ici sont par définition favorites.
+    ctx = {'request': request, 'favorited_ids': {f.car_id for f in favs}}
+    return Response(FavoriteSerializer(favs, many=True, context=ctx).data)
 
 
 @api_view(['POST', 'DELETE'])
@@ -262,6 +305,12 @@ def car_upload_images(request, pk):
     files = request.FILES.getlist('images')
     if not files:
         return Response({'error': 'Aucun fichier fourni'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Validation magic-bytes de chaque fichier (sinon n'importe quel .php/.html peut être uploadé)
+    for f in files:
+        err = _validate_image(f)
+        if err:
+            return Response({'error': err}, status=status.HTTP_400_BAD_REQUEST)
 
     base_order = car.car_images.count()
     images = []
@@ -306,6 +355,7 @@ def car_delete_image(request, pk, image_id):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@ratelimit(key='user', rate='5/d', method='POST', block=True)
 def request_premium(request):
     try:
         seller = request.user.seller_profile
@@ -314,10 +364,219 @@ def request_premium(request):
 
     if seller.plan == 'premium':
         return Response({'error': 'Vous êtes déjà Premium'}, status=400)
+    if seller.premium_requested:
+        return Response({'error': 'Une demande est déjà en cours.'}, status=400)
 
     seller.premium_requested = True
-    seller.save()
+    seller.save(update_fields=['premium_requested'])
     return Response({'success': True, 'message': 'Demande envoyée. L\'équipe vous contactera sous 24h.'})
+
+
+# ── Paiement Premium via PayTech ──────────────────────────────────────────────
+# PayTech (https://paytech.sn) : passerelle de paiement (cartes + mobile money).
+# Flux : checkout (on initie le paiement et on redirige le vendeur vers PayTech) →
+# le vendeur paie → PayTech notifie notre IPN (webhook) → on active le Premium.
+# Aucun prélèvement récurrent côté PayTech : le renouvellement est manuel.
+
+def _premium_ipn_url(request):
+    """URL HTTPS de l'IPN PayTech. PayTech REFUSE la requête s'il n'y a pas d'IPN, et
+    exige du HTTPS (les URLs http/localhost sont rejetées). On la dérive de
+    BACKEND_PUBLIC_URL, sinon de la requête courante si elle est déjà en HTTPS
+    (cas production derrière proxy TLS). Renvoie '' si aucune URL HTTPS n'est dispo."""
+    if settings.BACKEND_PUBLIC_URL:
+        return settings.BACKEND_PUBLIC_URL.rstrip('/') + '/api/premium/ipn/'
+    candidate = request.build_absolute_uri('/api/premium/ipn/')
+    return candidate if candidate.startswith('https://') else ''
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@ratelimit(key='user', rate='10/h', method='POST', block=True)
+def premium_checkout(request):
+    """Initie un paiement PayTech pour l'abonnement Premium (5 000 FCFA / mois).
+    Exige l'acceptation des CGU. Renvoie l'URL de redirection vers la page PayTech."""
+    if not PlatformSettings.get().premium_enabled:
+        return Response({'detail': "Les abonnements Premium ne sont pas activés."}, status=403)
+
+    try:
+        seller = request.user.seller_profile
+    except Exception:
+        return Response({'detail': 'Profil vendeur introuvable.'}, status=404)
+
+    if not request.data.get('cgu_accepted'):
+        return Response({'detail': "Vous devez accepter les Conditions Générales d'Utilisation."}, status=400)
+
+    if not settings.PAYTECH_API_KEY or not settings.PAYTECH_SECRET_KEY:
+        logger.error('PayTech non configuré : PAYTECH_API_KEY/SECRET_KEY manquants.')
+        return Response({'detail': "Le paiement en ligne est momentanément indisponible."}, status=503)
+
+    amount = settings.PREMIUM_PRICE_XOF  # montant FIXÉ serveur (jamais depuis le client)
+    ref_command = f"AC-PREM-{seller.pk}-{uuid.uuid4().hex[:12]}"
+
+    payment = PremiumPayment.objects.create(
+        seller=seller,
+        ref_command=ref_command,
+        amount=amount,
+        months=1,
+        currency='XOF',
+        status=PremiumPayment.PENDING,
+        cgu_accepted=True,
+        cgu_version=settings.PREMIUM_CGU_VERSION,
+        cgu_accepted_at=timezone.now(),
+    )
+
+    success_url = f"{settings.FRONTEND_URL.rstrip('/')}/?premium=success&ref={ref_command}"
+    cancel_url = f"{settings.FRONTEND_URL.rstrip('/')}/?premium=cancel&ref={ref_command}"
+    payload = {
+        'item_name': 'Abonnement Premium AUTOCONNECT (1 mois)',
+        'item_price': amount,
+        'currency': 'XOF',
+        'ref_command': ref_command,
+        'command_name': 'Abonnement Premium AUTOCONNECT',
+        'env': settings.PAYTECH_ENV,
+        'success_url': success_url,
+        'cancel_url': cancel_url,
+        'custom_field': json.dumps({'seller_id': seller.pk, 'ref_command': ref_command}),
+    }
+    # PayTech exige une IPN HTTPS pour renvoyer le lien de paiement.
+    ipn_url = _premium_ipn_url(request)
+    if not ipn_url:
+        if settings.DEBUG:
+            # Dev sans URL publique : on envoie une IPN factice (non joignable) juste
+            # pour obtenir le lien de paiement. L'activation se fait alors via l'admin
+            # (ou configurez BACKEND_PUBLIC_URL avec un tunnel ngrok pour l'IPN réelle).
+            ipn_url = 'https://example.com/api/premium/ipn/'
+            logger.warning("PayTech (dev) : BACKEND_PUBLIC_URL absent — IPN factice utilisée, "
+                           "activez le Premium via l'admin ou configurez un tunnel HTTPS.")
+        else:
+            logger.error('PayTech : aucune URL IPN HTTPS disponible (BACKEND_PUBLIC_URL manquant).')
+            return Response({'detail': "Paiement indisponible : configuration serveur incomplète."}, status=503)
+    payload['ipn_url'] = ipn_url
+
+    headers = {
+        'API_KEY': settings.PAYTECH_API_KEY,
+        'API_SECRET': settings.PAYTECH_SECRET_KEY,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+    }
+
+    try:
+        resp = requests.post(settings.PAYTECH_REQUEST_URL, json=payload, headers=headers, timeout=20)
+        data = resp.json()
+    except Exception as exc:
+        logger.exception('Échec de la requête PayTech : %s', exc)
+        payment.status = PremiumPayment.FAILED
+        payment.save(update_fields=['status', 'updated_at'])
+        return Response({'detail': "Impossible de contacter le service de paiement. Réessayez."}, status=502)
+
+    if str(data.get('success')) != '1' or not data.get('redirect_url'):
+        logger.error('Réponse PayTech inattendue : %s', data)
+        payment.status = PremiumPayment.FAILED
+        payment.save(update_fields=['status', 'updated_at'])
+        return Response({'detail': "Le service de paiement a refusé la demande."}, status=502)
+
+    payment.token = data.get('token', '')
+    payment.save(update_fields=['token', 'updated_at'])
+
+    return Response({
+        'redirect_url': data['redirect_url'],
+        'ref_command': ref_command,
+    })
+
+
+def _sha256(value):
+    return hashlib.sha256((value or '').encode('utf-8')).hexdigest()
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def premium_ipn(request):
+    """Webhook IPN appelé par PayTech (serveur→serveur) pour notifier le résultat.
+    Sécurité : on vérifie que les hash SHA256 des clés transmis par PayTech
+    correspondent aux nôtres (comparaison à temps constant). Idempotent."""
+    data = request.data
+
+    api_key_sha256 = data.get('api_key_sha256', '')
+    api_secret_sha256 = data.get('api_secret_sha256', '')
+    ok_key = hmac.compare_digest(api_key_sha256, _sha256(settings.PAYTECH_API_KEY))
+    ok_secret = hmac.compare_digest(api_secret_sha256, _sha256(settings.PAYTECH_SECRET_KEY))
+    if not (ok_key and ok_secret):
+        logger.warning('IPN PayTech rejeté : signature invalide (ref=%s).', data.get('ref_command'))
+        return Response({'detail': 'Signature invalide.'}, status=403)
+
+    ref_command = data.get('ref_command', '')
+    try:
+        payment = PremiumPayment.objects.select_related('seller').get(ref_command=ref_command)
+    except PremiumPayment.DoesNotExist:
+        logger.warning('IPN PayTech : ref_command introuvable (%s).', ref_command)
+        return Response({'detail': 'Référence inconnue.'}, status=404)
+
+    type_event = data.get('type_event', '')
+
+    if type_event == 'sale_complete':
+        if payment.status == PremiumPayment.SUCCESS:
+            return Response({'detail': 'Déjà traité.'})  # idempotent
+        # Contrôle du montant : on refuse si PayTech annonce un montant différent.
+        try:
+            paid = int(float(data.get('item_price', payment.amount)))
+        except (TypeError, ValueError):
+            paid = payment.amount
+        if paid < payment.amount:
+            logger.error('IPN PayTech : montant insuffisant (%s < %s) ref=%s.', paid, payment.amount, ref_command)
+            payment.status = PremiumPayment.FAILED
+            payment.save(update_fields=['status', 'updated_at'])
+            return Response({'detail': 'Montant invalide.'}, status=400)
+
+        payment.status = PremiumPayment.SUCCESS
+        payment.paid_at = timezone.now()
+        payment.payment_method = (data.get('payment_method') or '')[:50]
+        payment.client_phone = (data.get('client_phone') or '')[:30]
+        payment.save(update_fields=['status', 'paid_at', 'payment_method', 'client_phone', 'updated_at'])
+
+        seller = payment.seller
+        premium_until = seller.extend_premium(months=payment.months)
+        AuditLog.objects.create(
+            admin=None, action='premium_payment',
+            target_type='seller', target_id=seller.pk, target_repr=seller.name,
+            note=f"Paiement PayTech {payment.amount} {payment.currency} — expire {premium_until:%d/%m/%Y}",
+        )
+        try:
+            from users.email_utils import send_premium_payment_confirmation
+            send_premium_payment_confirmation(seller, premium_until)
+        except Exception:
+            logger.exception('Envoi email confirmation Premium échoué (ref=%s).', ref_command)
+        return Response({'detail': 'OK'})
+
+    if type_event == 'sale_canceled':
+        if payment.status == PremiumPayment.PENDING:
+            payment.status = PremiumPayment.CANCELLED
+            payment.save(update_fields=['status', 'updated_at'])
+        return Response({'detail': 'OK'})
+
+    return Response({'detail': 'Événement ignoré.'})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def premium_status(request):
+    """Permet au frontend de sonder l'état d'un paiement après la redirection PayTech
+    (l'IPN étant asynchrone). Ne renvoie que les paiements du vendeur connecté."""
+    ref = request.query_params.get('ref', '')
+    try:
+        seller = request.user.seller_profile
+    except Exception:
+        return Response({'detail': 'Profil vendeur introuvable.'}, status=404)
+    try:
+        payment = PremiumPayment.objects.get(ref_command=ref, seller=seller)
+    except PremiumPayment.DoesNotExist:
+        return Response({'detail': 'Paiement introuvable.'}, status=404)
+
+    return Response({
+        'status': payment.status,
+        'plan': seller.plan,
+        'is_premium': seller.is_premium,
+        'premium_until': seller.premium_until.isoformat() if seller.premium_until else None,
+    })
 
 
 # ── Reports ──────────────────────────────────────────────────────────────────
@@ -353,6 +612,33 @@ def report_car(request, car_id):
 
 # ── Logo vendeur ──────────────────────────────────────────────────────────────
 
+ALLOWED_IMAGE_FORMATS = {'JPEG', 'PNG', 'WEBP'}
+MAX_UPLOAD_SIZE = 5 * 1024 * 1024  # 5 Mo
+_FORMAT_EXT = {'JPEG': '.jpg', 'PNG': '.png', 'WEBP': '.webp'}
+
+
+def _validate_image(file):
+    """Valide une image par magic-bytes via Pillow et renomme le fichier en
+    UUID + extension cohérente (anti 'evil.jpg.html' servi en HTML)."""
+    if file.size > MAX_UPLOAD_SIZE:
+        return 'Le fichier ne doit pas dépasser 5 Mo.'
+    try:
+        from PIL import Image
+        file.seek(0)
+        img = Image.open(file)
+        img.verify()
+        fmt = (img.format or '').upper()
+    except Exception:
+        return 'Image invalide ou corrompue.'
+    finally:
+        file.seek(0)
+    if fmt not in ALLOWED_IMAGE_FORMATS:
+        return 'Format non supporté. Utilisez JPG, PNG ou WebP.'
+    import uuid
+    file.name = f'{uuid.uuid4().hex}{_FORMAT_EXT[fmt]}'
+    return None
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def upload_seller_logo(request):
@@ -363,6 +649,9 @@ def upload_seller_logo(request):
     file = request.FILES.get('logo')
     if not file:
         return Response({'error': 'Aucun fichier fourni'}, status=400)
+    err = _validate_image(file)
+    if err:
+        return Response({'error': err}, status=400)
     if seller.logo:
         seller.logo.delete(save=False)
     seller.logo = file
@@ -384,7 +673,11 @@ def seller_reviews(request, seller_id):
         reviews = seller.reviews.all()
         return Response(ReviewSerializer(reviews, many=True, context={'request': request}).data)
 
-    # POST — vérifier que l'utilisateur n'a pas déjà laissé un avis
+    # POST — interdire l'auto-review (un vendeur ne peut pas noter son propre profil)
+    if seller.user_id == request.user.id:
+        return Response({'error': 'Vous ne pouvez pas évaluer votre propre profil.'}, status=400)
+
+    # Vérifier que l'utilisateur n'a pas déjà laissé un avis
     if Review.objects.filter(reviewer=request.user, seller=seller).exists():
         return Response({'error': 'Vous avez déjà laissé un avis pour ce vendeur.'}, status=400)
 
@@ -460,11 +753,7 @@ def conversation_messages(request, conv_id):
         return Response({'error': 'Conversation introuvable'}, status=404)
 
     if request.method == 'GET':
-        # Marquer les messages non lus comme lus (ceux envoyés par l'autre)
-        if is_buyer:
-            conv.messages.filter(is_read=False).exclude(sender=user).update(is_read=True)
-        else:
-            conv.messages.filter(is_read=False).exclude(sender=user).update(is_read=True)
+        conv.messages.filter(is_read=False).exclude(sender=user).update(is_read=True)
         msgs = conv.messages.all()
         return Response(MessageSerializer(msgs, many=True, context={'request': request}).data)
 
@@ -505,11 +794,12 @@ def seller_dashboard(request):
     except Exception:
         return Response({'error': 'Profil vendeur introuvable'}, status=404)
 
-    cars = Car.objects.filter(seller=seller)
+    cars = Car.objects.filter(seller=seller).prefetch_related('car_images')
     appointments = Appointment.objects.filter(seller=seller).select_related('car', 'buyer')
 
+    ctx = {'request': request, 'favorited_ids': _favorited_ids(request)}
     return Response({
-        'seller': SellerSerializer(seller).data,
+        'seller': SellerSerializer(seller, context=ctx).data,
         'stats': {
             'total_cars': cars.count(),
             'active_cars': cars.filter(is_available=True).count(),
@@ -517,8 +807,7 @@ def seller_dashboard(request):
             'pending_appointments': appointments.filter(status='pending').count(),
             'confirmed_appointments': appointments.filter(status='confirmed').count(),
         },
-        'cars': CarSerializer(cars, many=True, context={'request': request}).data,
-        'cars': CarSerializer(cars, many=True, context={'request': request}).data,
+        'cars': CarSerializer(cars, many=True, context=ctx).data,
         'appointments': AppointmentSerializer(appointments, many=True).data,
     })
 
@@ -534,12 +823,17 @@ def rental_request_list(request):
         if user.user_type in ('seller', 'admin') or hasattr(user, 'seller_profile'):
             try:
                 seller = user.seller_profile
-                qs = RentalRequest.objects.filter(seller=seller).select_related('car', 'renter', 'seller')
+                qs = (RentalRequest.objects.filter(seller=seller)
+                      .select_related('car', 'car__seller', 'renter', 'seller')
+                      .prefetch_related('car__car_images'))
             except Exception:
                 qs = RentalRequest.objects.none()
         else:
-            qs = RentalRequest.objects.filter(renter=user).select_related('car', 'seller')
-        return Response(RentalRequestSerializer(qs, many=True, context={'request': request}).data)
+            qs = (RentalRequest.objects.filter(renter=user)
+                  .select_related('car', 'car__seller', 'renter', 'seller')
+                  .prefetch_related('car__car_images'))
+        ctx = {'request': request, 'favorited_ids': _favorited_ids(request)}
+        return Response(RentalRequestSerializer(qs, many=True, context=ctx).data)
 
     # POST -- create rental request
     car_id = request.data.get('car_id')
@@ -555,6 +849,15 @@ def rental_request_list(request):
     end_date = request.data.get('end_date')
     if not start_date or not end_date:
         return Response({'error': 'Les dates de debut et de fin sont obligatoires.'}, status=400)
+
+    from datetime import date
+    try:
+        sd = date.fromisoformat(str(start_date))
+        ed = date.fromisoformat(str(end_date))
+    except (ValueError, TypeError):
+        return Response({'error': 'Format de date invalide (YYYY-MM-DD attendu).'}, status=400)
+    if sd >= ed:
+        return Response({'error': 'La date de fin doit être strictement après la date de début.'}, status=400)
 
     overlap = RentalRequest.objects.filter(
         car=car,
@@ -589,7 +892,10 @@ def rental_request_list(request):
 @permission_classes([IsAuthenticated])
 def rental_request_detail(request, pk):
     try:
-        rental = RentalRequest.objects.select_related('car', 'renter', 'seller').get(pk=pk)
+        rental = (RentalRequest.objects
+                  .select_related('car', 'car__seller', 'renter', 'seller')
+                  .prefetch_related('car__car_images')
+                  .get(pk=pk))
     except RentalRequest.DoesNotExist:
         return Response({'error': 'Demande introuvable'}, status=404)
 

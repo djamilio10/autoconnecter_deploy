@@ -1,21 +1,24 @@
 import uuid
 
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 from rest_framework_simplejwt.tokens import RefreshToken
-from django.contrib.auth import authenticate
 from .models import User, phone_validator, id_card_validator
 
 
 class UserSerializer(serializers.ModelSerializer):
     avatar_url = serializers.SerializerMethodField()
+    two_factor_enabled = serializers.BooleanField(source='totp_enabled', read_only=True)
 
     class Meta:
         model = User
         fields = ['id', 'email', 'first_name', 'last_name', 'user_type',
                   'company', 'phone', 'id_card_number', 'location', 'is_verified',
-                  'avatar_initials', 'avatar_url', 'rating', 'review_count', 'is_staff']
+                  'avatar_initials', 'avatar_url', 'rating', 'review_count', 'is_staff',
+                  'two_factor_enabled']
         read_only_fields = ['id', 'is_verified', 'is_staff', 'avatar_initials',
-                            'avatar_url', 'rating', 'review_count']
+                            'avatar_url', 'rating', 'review_count', 'two_factor_enabled']
 
     def get_avatar_url(self, obj):
         if not obj.avatar_image:
@@ -26,7 +29,7 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class RegisterSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, min_length=6)
+    password = serializers.CharField(write_only=True, min_length=8)
     phone = serializers.CharField(required=True, validators=[phone_validator])
     id_card_number = serializers.CharField(required=True, validators=[id_card_validator])
 
@@ -42,29 +45,28 @@ class RegisterSerializer(serializers.ModelSerializer):
     # ── Validation unicite email / CNI ────────────────────────────────────────
     def validate_email(self, value):
         value = value.lower().strip()
-        user_type = self.initial_data.get('user_type', User.BUYER)
-        if User.objects.filter(email__iexact=value, user_type=user_type).exists():
-            raise serializers.ValidationError(
-                "Un compte de ce type existe déjà avec cette adresse email."
-            )
+        if User.objects.filter(email__iexact=value).exists():
+            raise serializers.ValidationError("Un compte existe déjà avec cette adresse email.")
         return value
 
     def validate_id_card_number(self, value):
         value = value.strip().replace(' ', '')
-        user_type = self.initial_data.get('user_type', User.BUYER)
-        if User.objects.filter(id_card_number=value, user_type=user_type).exists():
-            raise serializers.ValidationError(
-                "Un compte de ce type existe déjà avec ce numéro de carte d'identité."
-            )
+        if User.objects.filter(id_card_number=value).exists():
+            raise serializers.ValidationError("Cette carte d'identité est déjà enregistrée.")
         return value
 
     def validate_phone(self, value):
         value = value.strip().replace(' ', '')
-        user_type = self.initial_data.get('user_type', User.BUYER)
-        if User.objects.filter(phone=value, user_type=user_type).exists():
-            raise serializers.ValidationError(
-                "Un compte de ce type existe déjà avec ce numéro de téléphone."
-            )
+        if User.objects.filter(phone=value).exists():
+            raise serializers.ValidationError("Un compte existe déjà avec ce numéro de téléphone.")
+        return value
+
+    def validate_password(self, value):
+        # Applique les validateurs Django (longueur, mot de passe courant, non-numérique…).
+        try:
+            validate_password(value)
+        except DjangoValidationError as e:
+            raise serializers.ValidationError(list(e.messages))
         return value
 
     def validate(self, data):
@@ -117,29 +119,32 @@ class RegisterSerializer(serializers.ModelSerializer):
 class LoginSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField()
+    otp = serializers.CharField(required=False, allow_blank=True)
 
     def validate(self, data):
         email = data['email'].lower().strip()
-        # Authentification par email (USERNAME_FIELD = 'email')
-        user = authenticate(username=email, password=data['password'])
-        if not user:
+        # Vérification manuelle des credentials : authenticate() rejette les comptes
+        # is_active=False, ce qui empêche la vue de renvoyer 'email_not_verified'.
+        # Le statut (banni / non vérifié / suspendu) est géré dans la vue login().
+        user = User.objects.filter(email__iexact=email).first()
+        if not user or not user.check_password(data['password']):
             raise serializers.ValidationError('Email ou mot de passe incorrect.')
-        if not user.is_active:
-            raise serializers.ValidationError('Ce compte est desactive.')
         data['user'] = user
         return data
 
 
 class TokenResponseSerializer(serializers.Serializer):
     access = serializers.CharField()
-    refresh = serializers.CharField()
     user = UserSerializer()
 
     @staticmethod
     def get_tokens(user):
+        """Génère access+refresh. Le refresh sera posé en cookie HttpOnly par la vue
+        via `set_refresh_cookie(response, refresh_str)`. Le body JSON ne contient
+        que l'access (gardé en mémoire côté frontend) et les infos user."""
         refresh = RefreshToken.for_user(user)
         return {
             'access': str(refresh.access_token),
-            'refresh': str(refresh),
+            'refresh': str(refresh),  # consommé par la vue pour poser le cookie
             'user': UserSerializer(user).data,
         }

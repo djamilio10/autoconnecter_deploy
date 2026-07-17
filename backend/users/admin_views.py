@@ -1,28 +1,21 @@
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 from django.db.models import Count, Q
 from django.utils import timezone
 from datetime import timedelta
+from autoconnect.security import IsPlatformAdmin
 from .models import User, AuditLog, PlatformSettings
 from .serializers import UserSerializer
 from cars.models import Car, Seller, Appointment, Report
 from datetime import datetime
 
 
-def is_admin(user):
-    return user.is_authenticated and (user.is_staff or user.user_type == 'admin')
-
-
 # ── Global stats ──────────────────────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsPlatformAdmin])
 def admin_stats(request):
-    if not is_admin(request.user):
-        return Response({'error': 'Accès refusé'}, status=403)
-
     now = timezone.now()
     week_ago = now - timedelta(days=7)
     month_ago = now - timedelta(days=30)
@@ -96,12 +89,13 @@ def admin_stats(request):
 # ── User management ───────────────────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsPlatformAdmin])
 def admin_users(request):
-    if not is_admin(request.user):
-        return Response({'error': 'Accès refusé'}, status=403)
-
-    users = User.objects.all().order_by('-date_joined')
+    # Optimisation N+1 : report_count via annotation (1 requête) au lieu d'un
+    # accès seller_profile.reports_received.count() par utilisateur.
+    users = (User.objects.all()
+             .annotate(report_count=Count('seller_profile__reports_received'))
+             .order_by('-date_joined'))
     q = request.query_params.get('q', '')
     if q:
         users = users.filter(Q(email__icontains=q) | Q(first_name__icontains=q) | Q(last_name__icontains=q))
@@ -122,22 +116,24 @@ def admin_users(request):
         'account_status': u.account_status,
         'date_joined': u.date_joined.strftime('%d/%m/%Y'),
         'avatar_initials': u.avatar_initials,
-        'report_count': u.seller_profile.reports_received.count() if hasattr(u, 'seller_profile') else 0,
+        'report_count': u.report_count,
     } for u in users]
     return Response(data)
 
 
 @api_view(['PATCH'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsPlatformAdmin])
 def admin_user_update(request, pk):
-    if not is_admin(request.user):
-        return Response({'error': 'Accès refusé'}, status=403)
     try:
         user = User.objects.get(pk=pk)
     except User.DoesNotExist:
         return Response({'error': 'Utilisateur introuvable'}, status=404)
 
     allowed = ['is_active', 'user_type', 'is_staff']
+    if 'user_type' in request.data:
+        valid_types = {c[0] for c in User.USER_TYPES}
+        if request.data['user_type'] not in valid_types:
+            return Response({'error': 'Type de compte invalide.'}, status=400)
     for field in allowed:
         if field in request.data:
             setattr(user, field, request.data[field])
@@ -154,28 +150,32 @@ def admin_user_update(request, pk):
 
 
 @api_view(['DELETE'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsPlatformAdmin])
 def admin_user_delete(request, pk):
-    if not is_admin(request.user):
-        return Response({'error': 'Accès refusé'}, status=403)
     if str(request.user.pk) == str(pk):
         return Response({'error': 'Impossible de supprimer votre propre compte'}, status=400)
     try:
-        User.objects.get(pk=pk).delete()
+        user = User.objects.get(pk=pk)
     except User.DoesNotExist:
         return Response({'error': 'Introuvable'}, status=404)
+    repr_str = str(user)
+    user.delete()
+    AuditLog.objects.create(
+        admin=request.user, action='delete_user',
+        target_type='user', target_id=pk, target_repr=repr_str, note='',
+    )
     return Response(status=204)
 
 
 # ── Car management ────────────────────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsPlatformAdmin])
 def admin_cars(request):
-    if not is_admin(request.user):
-        return Response({'error': 'Accès refusé'}, status=403)
-
-    cars = Car.objects.select_related('seller').all().order_by('-created_at')
+    # appointment_count via annotation (évite 1 requête .count() par voiture).
+    cars = (Car.objects.select_related('seller')
+            .annotate(appointment_count=Count('appointments'))
+            .order_by('-created_at'))
     q = request.query_params.get('q', '')
     if q:
         cars = cars.filter(Q(make__icontains=q) | Q(model__icontains=q))
@@ -190,47 +190,59 @@ def admin_cars(request):
         'seller_name': c.seller.name if c.seller else '—',
         'seller_verified': c.seller.is_verified if c.seller else False,
         'created_at': c.created_at.strftime('%d/%m/%Y'),
-        'appointment_count': c.appointments.count(),
+        'appointment_count': c.appointment_count,
     } for c in cars]
     return Response(data)
 
 
 @api_view(['PATCH'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsPlatformAdmin])
 def admin_car_update(request, pk):
-    if not is_admin(request.user):
-        return Response({'error': 'Accès refusé'}, status=403)
     try:
         car = Car.objects.get(pk=pk)
     except Car.DoesNotExist:
         return Response({'error': 'Voiture introuvable'}, status=404)
     if 'is_available' in request.data:
-        car.is_available = request.data['is_available']
-    car.save()
+        car.is_available = bool(request.data['is_available'])
+        car.save(update_fields=['is_available'])
+        AuditLog.objects.create(
+            admin=request.user, action='update_car',
+            target_type='car', target_id=car.pk,
+            target_repr=f'{car.make} {car.model}',
+            note=f'is_available → {car.is_available}',
+        )
     return Response({'success': True})
 
 
 @api_view(['DELETE'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsPlatformAdmin])
 def admin_car_delete(request, pk):
-    if not is_admin(request.user):
-        return Response({'error': 'Accès refusé'}, status=403)
     try:
-        Car.objects.get(pk=pk).delete()
+        car = Car.objects.get(pk=pk)
     except Car.DoesNotExist:
         return Response({'error': 'Introuvable'}, status=404)
+    repr_str = f'{car.make} {car.model} ({car.seller.name if car.seller else "—"})'
+    car.delete()
+    AuditLog.objects.create(
+        admin=request.user, action='delete_car',
+        target_type='car', target_id=pk, target_repr=repr_str, note='',
+    )
     return Response(status=204)
 
 
 # ── Seller verification ───────────────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsPlatformAdmin])
 def admin_sellers(request):
-    if not is_admin(request.user):
-        return Response({'error': 'Accès refusé'}, status=403)
-
-    sellers = Seller.objects.all().order_by('-is_premium', '-created_at')
+    # 3 compteurs via annotations (évite 3 requêtes .count() par vendeur).
+    sellers = (Seller.objects
+               .annotate(
+                   car_count=Count('cars', distinct=True),
+                   appointment_count=Count('appointments', distinct=True),
+                   report_count=Count('reports_received', distinct=True),
+               )
+               .order_by('-is_premium', '-created_at'))
     data = [{
         'id': s.id,
         'name': s.name,
@@ -245,32 +257,33 @@ def admin_sellers(request):
         'premium_until': s.premium_until.isoformat() if s.premium_until else None,
         'premium_requested': s.premium_requested,
         'plan': s.plan,
-        'car_count': s.cars.count(),
-        'appointment_count': s.appointments.count(),
-        'report_count': s.reports_received.count(),
+        'car_count': s.car_count,
+        'appointment_count': s.appointment_count,
+        'report_count': s.report_count,
     } for s in sellers]
     return Response(data)
 
 
 @api_view(['PATCH'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsPlatformAdmin])
 def admin_seller_verify(request, pk):
-    if not is_admin(request.user):
-        return Response({'error': 'Accès refusé'}, status=403)
     try:
         seller = Seller.objects.get(pk=pk)
     except Seller.DoesNotExist:
         return Response({'error': 'Vendeur introuvable'}, status=404)
-    seller.is_verified = request.data.get('is_verified', not seller.is_verified)
-    seller.save()
+    seller.is_verified = bool(request.data.get('is_verified', not seller.is_verified))
+    seller.save(update_fields=['is_verified'])
+    AuditLog.objects.create(
+        admin=request.user, action='verify_seller',
+        target_type='seller', target_id=seller.pk, target_repr=seller.name,
+        note=f'is_verified → {seller.is_verified}',
+    )
     return Response({'success': True, 'is_verified': seller.is_verified})
 
 
 @api_view(['PATCH'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsPlatformAdmin])
 def admin_seller_premium(request, pk):
-    if not is_admin(request.user):
-        return Response({'error': 'Accès refusé'}, status=403)
     try:
         seller = Seller.objects.get(pk=pk)
     except Seller.DoesNotExist:
@@ -310,11 +323,8 @@ def admin_seller_premium(request, pk):
 # ── Appointments management ───────────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsPlatformAdmin])
 def admin_appointments(request):
-    if not is_admin(request.user):
-        return Response({'error': 'Accès refusé'}, status=403)
-
     appts = Appointment.objects.select_related('car', 'buyer', 'seller').order_by('-created_at')
     status_filter = request.query_params.get('status', '')
     if status_filter:
@@ -334,27 +344,32 @@ def admin_appointments(request):
 
 
 @api_view(['PATCH'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsPlatformAdmin])
 def admin_appointment_update(request, pk):
-    if not is_admin(request.user):
-        return Response({'error': 'Accès refusé'}, status=403)
     try:
         appt = Appointment.objects.get(pk=pk)
     except Appointment.DoesNotExist:
         return Response({'error': 'Introuvable'}, status=404)
     if 'status' in request.data:
-        appt.status = request.data['status']
-        appt.save()
+        new_status = request.data['status']
+        valid = {c[0] for c in Appointment.STATUS_CHOICES}
+        if new_status not in valid:
+            return Response({'error': 'Statut invalide.'}, status=400)
+        appt.status = new_status
+        appt.save(update_fields=['status'])
+        AuditLog.objects.create(
+            admin=request.user, action='update_appointment',
+            target_type='appointment', target_id=appt.pk,
+            target_repr=str(appt), note=f'status → {new_status}',
+        )
     return Response({'success': True})
 
 
 # ── Ban / Suspend user ────────────────────────────────────────────────────────
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsPlatformAdmin])
 def admin_ban_user(request, pk):
-    if not is_admin(request.user):
-        return Response({'error': 'Accès refusé'}, status=403)
     if str(request.user.pk) == str(pk):
         return Response({'error': 'Impossible de vous bannir vous-même'}, status=400)
     try:
@@ -406,11 +421,8 @@ def admin_ban_user(request, pk):
 # ── Reports management ────────────────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsPlatformAdmin])
 def admin_reports(request):
-    if not is_admin(request.user):
-        return Response({'error': 'Accès refusé'}, status=403)
-
     reports = Report.objects.select_related('reporter', 'seller', 'car').order_by('-created_at')
     status_filter = request.query_params.get('status', '')
     if status_filter:
@@ -436,10 +448,8 @@ def admin_reports(request):
 
 
 @api_view(['PATCH'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsPlatformAdmin])
 def admin_report_update(request, pk):
-    if not is_admin(request.user):
-        return Response({'error': 'Accès refusé'}, status=403)
     try:
         report = Report.objects.select_related('seller', 'car', 'seller__user').get(pk=pk)
     except Report.DoesNotExist:
@@ -484,11 +494,8 @@ def admin_report_update(request, pk):
 # ── Platform settings ─────────────────────────────────────────────────────────
 
 @api_view(['GET', 'PATCH'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsPlatformAdmin])
 def admin_platform_settings(request):
-    if not is_admin(request.user):
-        return Response({'error': 'Accès refusé'}, status=403)
-
     cfg = PlatformSettings.get()
 
     if request.method == 'PATCH':
@@ -521,11 +528,8 @@ def admin_platform_settings(request):
 # ── Audit log ─────────────────────────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsPlatformAdmin])
 def admin_audit_log(request):
-    if not is_admin(request.user):
-        return Response({'error': 'Accès refusé'}, status=403)
-
     logs = AuditLog.objects.select_related('admin').order_by('-created_at')[:100]
     data = [{
         'id': l.id,

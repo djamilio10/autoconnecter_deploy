@@ -1,6 +1,6 @@
 import React from 'react';
 import { C, Logo, Input } from './Shared';
-import { authApi, sellersApi } from '../api';
+import { authApi, sellersApi, setAccessToken } from '../api';
 
 // ── Helpers de validation ────────────────────────────────────────────────────
 const PHONE_RE = /^(\+?221)?\s?(7[05678])\s?\d{3}\s?\d{2}\s?\d{2}$/;
@@ -235,8 +235,7 @@ function VerifyEmailStep({ email, onVerified, onBack, isMobile }) {
     setError('');
     try {
       const res = await authApi.verifyEmail({ email, code });
-      localStorage.setItem('access_token', res.data.access);
-      localStorage.setItem('refresh_token', res.data.refresh);
+      setAccessToken(res.data.access);
       onVerified(res.data.user);
     } catch (err) {
       setError(err.response?.data?.detail || 'Code incorrect ou expiré.');
@@ -375,6 +374,238 @@ function VerifyEmailStep({ email, onVerified, onBack, isMobile }) {
   );
 }
 
+// ── Mot de passe oublié (demande de code → réinitialisation) ──────────────────
+function ForgotPasswordStep({ onDone, onBack, isMobile }) {
+  const [phase, setPhase] = React.useState('request'); // 'request' | 'reset'
+  const [email, setEmail] = React.useState('');
+  const [code, setCode] = React.useState('');
+  const [pwd, setPwd] = React.useState('');
+  const [confirm, setConfirm] = React.useState('');
+  const [showPwd, setShowPwd] = React.useState(false);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState('');
+  const [info, setInfo] = React.useState('');
+
+  const inputsRef = React.useRef([]);
+  const digits = code.split('');
+
+  const handleRequest = async () => {
+    if (!email.includes('@')) { setError('Adresse email invalide.'); return; }
+    setLoading(true); setError(''); setInfo('');
+    try {
+      const res = await authApi.requestPasswordReset(email.trim());
+      setInfo(res.data?.detail || 'Si un compte existe, un code a été envoyé.');
+      setPhase('reset');
+    } catch (err) {
+      setError(err.response?.data?.detail || "Impossible d'envoyer le code. Réessayez.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleReset = async () => {
+    if (code.length !== 6) { setError('Le code doit contenir 6 chiffres.'); return; }
+    if (pwd.length < 8) { setError('Le mot de passe doit contenir au moins 8 caractères.'); return; }
+    if (pwd !== confirm) { setError('Les mots de passe ne correspondent pas.'); return; }
+    setLoading(true); setError('');
+    try {
+      await authApi.confirmPasswordReset({ email: email.trim(), code, new_password: pwd });
+      onDone('Mot de passe réinitialisé. Connectez-vous avec votre nouveau mot de passe.');
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Code invalide ou expiré.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDigitChange = (i, val) => {
+    const d = val.replace(/\D/g, '').slice(-1);
+    const next = [...digits];
+    next[i] = d;
+    setCode(next.join('').slice(0, 6));
+    setError('');
+    if (d && i < 5) inputsRef.current[i + 1]?.focus();
+  };
+  const handleDigitKeyDown = (i, e) => {
+    if (e.key === 'Backspace' && !digits[i] && i > 0) inputsRef.current[i - 1]?.focus();
+  };
+  const handlePaste = (e) => {
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    if (pasted) { setCode(pasted); setError(''); inputsRef.current[Math.min(pasted.length, 5)]?.focus(); }
+    e.preventDefault();
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, alignItems: 'center' }}>
+      <div style={{
+        width: 80, height: 80, borderRadius: '50%',
+        background: 'rgba(201,169,110,0.1)', border: '2px solid rgba(201,169,110,0.3)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36,
+      }}>🔑</div>
+
+      <div style={{ textAlign: 'center' }}>
+        <h2 style={{ margin: '0 0 10px', fontFamily: C.playfair, fontSize: 22, color: C.text }}>
+          {phase === 'request' ? 'Mot de passe oublié' : 'Réinitialiser le mot de passe'}
+        </h2>
+        <p style={{ margin: 0, fontFamily: C.dm, fontSize: 13, color: C.muted, lineHeight: 1.7 }}>
+          {phase === 'request'
+            ? 'Entrez votre adresse email pour recevoir un code de réinitialisation.'
+            : <>Entrez le code à 6 chiffres envoyé à<br /><strong style={{ color: C.gold }}>{email}</strong> et votre nouveau mot de passe.</>}
+        </p>
+      </div>
+
+      {error && (
+        <div style={{
+          background: 'rgba(224,92,92,0.1)', border: '1px solid rgba(224,92,92,0.3)',
+          borderRadius: 10, padding: '10px 16px', width: '100%', boxSizing: 'border-box',
+          fontFamily: C.dm, fontSize: 13, color: C.error, textAlign: 'center',
+        }}>{error}</div>
+      )}
+      {info && phase === 'reset' && (
+        <div style={{
+          background: 'rgba(76,175,125,0.1)', border: '1px solid rgba(76,175,125,0.3)',
+          borderRadius: 10, padding: '10px 16px', width: '100%', boxSizing: 'border-box',
+          fontFamily: C.dm, fontSize: 13, color: '#4caf7d', textAlign: 'center',
+        }}>{info}</div>
+      )}
+
+      {phase === 'request' ? (
+        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 18 }}
+             onKeyDown={e => { if (e.key === 'Enter' && !loading) handleRequest(); }}>
+          <Input
+            label="Adresse email"
+            type="email"
+            value={email}
+            onChange={e => { setEmail(e.target.value); setError(''); }}
+            placeholder="votre@email.com"
+          />
+          <button onClick={handleRequest} disabled={loading} style={{
+            width: '100%', background: loading ? 'rgba(201,169,110,0.4)' : C.gold,
+            border: 'none', color: C.bg, fontFamily: C.dm, fontSize: 15, fontWeight: 700,
+            padding: '14px', borderRadius: 10, cursor: loading ? 'not-allowed' : 'pointer',
+          }}>
+            {loading ? 'Envoi...' : 'Envoyer le code'}
+          </button>
+        </div>
+      ) : (
+        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 18 }}>
+          <div style={{ display: 'flex', gap: isMobile ? 8 : 12, justifyContent: 'center' }} onPaste={handlePaste}>
+            {[0,1,2,3,4,5].map(i => (
+              <input
+                key={i}
+                ref={el => inputsRef.current[i] = el}
+                type="text"
+                inputMode="numeric"
+                maxLength={1}
+                value={digits[i] || ''}
+                onChange={e => handleDigitChange(i, e.target.value)}
+                onKeyDown={e => handleDigitKeyDown(i, e)}
+                style={{
+                  width: isMobile ? 42 : 52, height: isMobile ? 52 : 64,
+                  textAlign: 'center', fontSize: isMobile ? 22 : 28, fontWeight: 700,
+                  fontFamily: C.dm, color: digits[i] ? C.gold : C.text,
+                  background: '#111113',
+                  border: `2px solid ${digits[i] ? C.goldBorder : error ? 'rgba(224,92,92,0.5)' : C.border}`,
+                  borderRadius: 12, outline: 'none', transition: 'border-color 0.15s',
+                }}
+              />
+            ))}
+          </div>
+
+          <div onKeyDown={e => { if (e.key === 'Enter' && !loading) handleReset(); }}>
+            <PasswordInput
+              label="Nouveau mot de passe"
+              value={pwd}
+              onChange={e => { setPwd(e.target.value); setError(''); }}
+              placeholder="••••••••"
+              show={showPwd}
+              onToggle={() => setShowPwd(v => !v)}
+            />
+            <PasswordStrengthBar password={pwd} />
+          </div>
+          <div onKeyDown={e => { if (e.key === 'Enter' && !loading) handleReset(); }}>
+            <PasswordInput
+              label="Confirmer le mot de passe"
+              value={confirm}
+              onChange={e => { setConfirm(e.target.value); setError(''); }}
+              placeholder="••••••••"
+              show={showPwd}
+              onToggle={() => setShowPwd(v => !v)}
+            />
+          </div>
+
+          <button onClick={handleReset} disabled={loading || code.length !== 6} style={{
+            width: '100%', background: (loading || code.length !== 6) ? 'rgba(201,169,110,0.4)' : C.gold,
+            border: 'none', color: C.bg, fontFamily: C.dm, fontSize: 15, fontWeight: 700,
+            padding: '14px', borderRadius: 10, cursor: (loading || code.length !== 6) ? 'not-allowed' : 'pointer',
+          }}>
+            {loading ? 'Réinitialisation...' : 'Réinitialiser mon mot de passe'}
+          </button>
+        </div>
+      )}
+
+      <button onClick={onBack} style={{
+        background: 'none', border: 'none', fontFamily: C.dm, fontSize: 13,
+        color: C.muted, cursor: 'pointer', padding: 0,
+      }}>
+        ← Retour à la connexion
+      </button>
+    </div>
+  );
+}
+
+// ── Étape 2FA à la connexion (saisie du code TOTP) ───────────────────────────
+function TwoFactorLoginStep({ onSubmit, onBack, loading, error }) {
+  const [code, setCode] = React.useState('');
+  const submit = () => { if (code.length === 6 && !loading) onSubmit(code); };
+  return (
+    <div>
+      <div style={{ textAlign: 'center', marginBottom: 8 }}>
+        <div style={{
+          width: 64, height: 64, borderRadius: '50%', margin: '0 auto 16px',
+          background: 'rgba(201,169,110,0.1)', border: '2px solid rgba(201,169,110,0.35)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28,
+        }}>🔐</div>
+      </div>
+      <h2 style={{ fontFamily: C.playfair, fontSize: 22, fontWeight: 700, color: C.text, textAlign: 'center', margin: '0 0 8px' }}>
+        Vérification en deux étapes
+      </h2>
+      <p style={{ fontFamily: C.dm, fontSize: 14, color: C.muted, textAlign: 'center', margin: '0 0 24px', lineHeight: 1.6 }}>
+        Saisissez le code à 6 chiffres affiché par votre application d'authentification.
+      </p>
+      {error && (
+        <div style={{
+          background: 'rgba(224,92,92,0.1)', border: '1px solid rgba(224,92,92,0.3)', color: '#f87171',
+          fontFamily: C.dm, fontSize: 13, borderRadius: 10, padding: '10px 14px', marginBottom: 16, textAlign: 'center',
+        }}>{error}</div>
+      )}
+      <input
+        value={code}
+        onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+        onKeyDown={e => { if (e.key === 'Enter') submit(); }}
+        placeholder="000000"
+        inputMode="numeric"
+        autoFocus
+        style={{
+          width: '100%', boxSizing: 'border-box', background: C.bg, border: `1px solid ${C.border}`,
+          color: C.text, fontFamily: C.dm, fontSize: 24, letterSpacing: '0.4em', textAlign: 'center',
+          padding: '14px', borderRadius: 12, outline: 'none',
+        }}
+      />
+      <button onClick={submit} disabled={loading || code.length !== 6} style={{
+        width: '100%', marginTop: 16, padding: '14px',
+        background: (loading || code.length !== 6) ? 'rgba(201,169,110,0.35)' : C.gold,
+        border: 'none', color: C.bg, fontFamily: C.dm, fontSize: 15, fontWeight: 700,
+        borderRadius: 12, cursor: (loading || code.length !== 6) ? 'not-allowed' : 'pointer',
+      }}>{loading ? 'Vérification...' : 'Se connecter'}</button>
+      <button onClick={onBack} style={{
+        width: '100%', marginTop: 12, padding: '12px', background: 'transparent',
+        border: 'none', color: C.muted, fontFamily: C.dm, fontSize: 13, cursor: 'pointer',
+      }}>← Retour</button>
+    </div>
+  );
+}
+
 export default function Auth({ navigate, setUser, initialMode, initialType }) {
   const winWidth = useWindowWidth();
   const isMobile = winWidth < 600;
@@ -398,6 +629,9 @@ export default function Auth({ navigate, setUser, initialMode, initialType }) {
   const [showConfirm, setShowConfirm] = React.useState(false);
   const [blockedInfo, setBlockedInfo] = React.useState(null);
   const [pendingVerificationEmail, setPendingVerificationEmail] = React.useState(null);
+  const [forgotPassword, setForgotPassword] = React.useState(false);
+  const [successMsg, setSuccessMsg] = React.useState('');
+  const [otpStep, setOtpStep] = React.useState(false);
 
   const handleLogoChange = (e) => {
     const file = e.target.files[0];
@@ -437,6 +671,28 @@ export default function Auth({ navigate, setUser, initialMode, initialType }) {
     return e;
   };
 
+  const finishLogin = (res) => {
+    setAccessToken(res.data.access);
+    setUser(res.data.user);
+    navigate(
+      res.data.user.user_type === 'seller' ? 'seller-dashboard' :
+      res.data.user.user_type === 'admin'  ? 'admin-dashboard'  : 'buyer-dashboard'
+    );
+  };
+
+  // 2ᵉ étape de connexion : renvoie email+mot de passe + code TOTP.
+  const submitOtp = async (otp) => {
+    setLoading(true); setApiError('');
+    try {
+      const res = await authApi.login({ email: form.email.trim(), password: form.password, otp });
+      finishLogin(res);
+    } catch (err) {
+      setApiError(err.response?.data?.detail || 'Code de vérification invalide.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async () => {
     const e = validate();
     if (Object.keys(e).length) { setErrors(e); return; }
@@ -446,13 +702,9 @@ export default function Auth({ navigate, setUser, initialMode, initialType }) {
       let res;
       if (mode === 'login') {
         res = await authApi.login({ email: form.email.trim(), password: form.password });
-        localStorage.setItem('access_token', res.data.access);
-        localStorage.setItem('refresh_token', res.data.refresh);
-        setUser(res.data.user);
-        navigate(
-          res.data.user.user_type === 'seller' ? 'seller-dashboard' :
-          res.data.user.user_type === 'admin'  ? 'admin-dashboard'  : 'buyer-dashboard'
-        );
+        // 2FA active : on bascule sur l'étape de saisie du code (sans jetons).
+        if (res.data.two_factor_required) { setOtpStep(true); return; }
+        finishLogin(res);
       } else {
         const [firstName, ...rest] = form.name.trim().split(' ');
         res = await authApi.register({
@@ -495,6 +747,50 @@ export default function Auth({ navigate, setUser, initialMode, initialType }) {
   // Permet d'envoyer le formulaire avec Entree
   const onKeyDown = (e) => { if (e.key === 'Enter' && !loading) handleSubmit(); };
 
+  if (forgotPassword) {
+    return (
+      <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: isMobile ? '24px 12px' : '60px 24px' }}>
+        <div style={{ width: '100%', maxWidth: 480, margin: '0 auto' }}>
+          <div style={{ textAlign: 'center', marginBottom: isMobile ? 20 : 40 }}>
+            <Logo size="lg" onClick={() => navigate('home')} />
+          </div>
+          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: isMobile ? 16 : 24, padding: isMobile ? '24px 16px' : 40 }}>
+            <ForgotPasswordStep
+              isMobile={isMobile}
+              onDone={(msg) => {
+                setForgotPassword(false);
+                setMode('login');
+                setSuccessMsg(msg);
+                setApiError('');
+              }}
+              onBack={() => setForgotPassword(false)}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (otpStep) {
+    return (
+      <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: isMobile ? '24px 12px' : '60px 24px' }}>
+        <div style={{ width: '100%', maxWidth: 480, margin: '0 auto' }}>
+          <div style={{ textAlign: 'center', marginBottom: isMobile ? 20 : 40 }}>
+            <Logo size="lg" onClick={() => navigate('home')} />
+          </div>
+          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: isMobile ? 16 : 24, padding: isMobile ? '24px 16px' : 40 }}>
+            <TwoFactorLoginStep
+              loading={loading}
+              error={apiError}
+              onSubmit={submitOtp}
+              onBack={() => { setOtpStep(false); setApiError(''); }}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (pendingVerificationEmail) {
     return (
       <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: isMobile ? '24px 12px' : '60px 24px' }}>
@@ -506,8 +802,11 @@ export default function Auth({ navigate, setUser, initialMode, initialType }) {
             <VerifyEmailStep
               email={pendingVerificationEmail}
               isMobile={isMobile}
-              onVerified={(user) => {
+              onVerified={async (user) => {
                 setUser(user);
+                if (logoFile && user.user_type === 'seller') {
+                  try { await sellersApi.uploadLogo(logoFile); } catch { /* ignore */ }
+                }
                 navigate(
                   user.user_type === 'seller' ? 'seller-dashboard' :
                   user.user_type === 'admin'  ? 'admin-dashboard'  : 'buyer-dashboard'
@@ -594,6 +893,14 @@ export default function Auth({ navigate, setUser, initialMode, initialType }) {
             </div>
           )}
 
+          {successMsg && mode === 'login' && (
+            <div style={{
+              background: 'rgba(76,175,125,0.1)', border: '1px solid rgba(76,175,125,0.3)',
+              borderRadius: 10, padding: '12px 16px', marginBottom: 20,
+              fontFamily: C.dm, fontSize: 13, color: '#4caf7d',
+            }}>{successMsg}</div>
+          )}
+
           {apiError && (
             <div style={{
               background: 'rgba(224,92,92,0.1)', border: '1px solid rgba(224,92,92,0.3)',
@@ -672,6 +979,15 @@ export default function Auth({ navigate, setUser, initialMode, initialType }) {
                 onToggle={() => setShowPassword(v => !v)}
               />
               {mode === 'register' && <PasswordStrengthBar password={form.password} />}
+              {mode === 'login' && (
+                <div style={{ textAlign: 'right', marginTop: 8 }}>
+                  <span
+                    onClick={() => { setForgotPassword(true); setApiError(''); setErrors({}); }}
+                    style={{ fontFamily: C.dm, fontSize: 13, color: C.gold, cursor: 'pointer' }}>
+                    Mot de passe oublié ?
+                  </span>
+                </div>
+              )}
             </div>
 
             {mode === 'register' && (

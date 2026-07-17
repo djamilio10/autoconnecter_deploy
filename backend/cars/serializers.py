@@ -4,13 +4,15 @@ from .models import Car, CarImage, Seller, Appointment, Favorite, Review, Conver
 
 class SellerSerializer(serializers.ModelSerializer):
     plan = serializers.ReadOnlyField()
+    premium_grace_end = serializers.ReadOnlyField()
     logo_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Seller
         fields = ['id', 'name', 'seller_type', 'avatar', 'logo_url', 'rating',
                   'review_count', 'location', 'phone', 'is_verified',
-                  'is_premium', 'premium_until', 'premium_requested', 'plan']
+                  'is_premium', 'premium_until', 'premium_grace_end',
+                  'premium_requested', 'plan']
 
     def get_logo_url(self, obj):
         request = self.context.get('request')
@@ -55,6 +57,12 @@ class CarSerializer(serializers.ModelSerializer):
                   'is_favorited', 'car_images', 'primary_image_url', 'created_at']
 
     def get_is_favorited(self, obj):
+        # Optimisation N+1 : la vue peut pré-charger l'ensemble des car_id favoris
+        # de l'utilisateur dans le contexte ('favorited_ids'), évitant une requête
+        # SQL par voiture. Fallback sur une requête unitaire si absent.
+        favorited_ids = self.context.get('favorited_ids')
+        if favorited_ids is not None:
+            return obj.id in favorited_ids
         request = self.context.get('request')
         if request and request.user.is_authenticated:
             return Favorite.objects.filter(user=request.user, car=obj).exists()
@@ -62,9 +70,12 @@ class CarSerializer(serializers.ModelSerializer):
 
     def get_primary_image_url(self, obj):
         request = self.context.get('request')
-        primary = obj.car_images.filter(is_primary=True).first()
+        # Itère sur les images préchargées (prefetch_related('car_images')) en Python
+        # plutôt que de relancer une requête SQL filtrée par voiture.
+        images = obj.car_images.all()
+        primary = next((im for im in images if im.is_primary), None)
         if not primary:
-            primary = obj.car_images.first()
+            primary = images[0] if images else None
         if primary and request:
             return request.build_absolute_uri(primary.image.url)
         if primary:
@@ -80,6 +91,11 @@ class AppointmentSerializer(serializers.ModelSerializer):
     buyer_name = serializers.SerializerMethodField()
     seller_name = serializers.SerializerMethodField()
 
+    # Statuts qu'un acheteur peut déclencher (annulation uniquement).
+    BUYER_ALLOWED_STATUSES = {'cancelled'}
+    # Statuts qu'un vendeur peut déclencher.
+    SELLER_ALLOWED_STATUSES = {'confirmed', 'cancelled', 'completed'}
+
     class Meta:
         model = Appointment
         fields = ['id', 'car', 'car_id', 'buyer_name', 'seller_name',
@@ -92,11 +108,34 @@ class AppointmentSerializer(serializers.ModelSerializer):
     def get_seller_name(self, obj):
         return obj.seller.name
 
+    def validate_status(self, value):
+        """Restreint les transitions de statut selon le rôle (anti-escalade).
+        Seul le vendeur peut confirmer/compléter ; l'acheteur ne peut qu'annuler."""
+        request = self.context.get('request')
+        instance = self.instance
+        if not request or not instance or value == instance.status:
+            return value
+        user = request.user
+        if instance.seller.user_id == user.id:
+            allowed = self.SELLER_ALLOWED_STATUSES
+        elif instance.buyer_id == user.id:
+            allowed = self.BUYER_ALLOWED_STATUSES
+        else:
+            raise serializers.ValidationError('Action non autorisée.')
+        if value not in allowed:
+            raise serializers.ValidationError(
+                f"Vous n'êtes pas autorisé à passer ce rendez-vous au statut '{value}'."
+            )
+        return value
+
     def create(self, validated_data):
         request = self.context['request']
         validated_data['buyer'] = request.user
         car = validated_data['car']
         validated_data['seller'] = car.seller
+        # Anti-escalade : un acheteur ne doit jamais pouvoir créer un RDV déjà confirmé.
+        validated_data['status'] = 'pending'
+        validated_data['cancellation_reason'] = ''
         return super().create(validated_data)
 
 
@@ -111,6 +150,7 @@ class FavoriteSerializer(serializers.ModelSerializer):
 class ReviewSerializer(serializers.ModelSerializer):
     reviewer_name = serializers.SerializerMethodField()
     reviewer_initials = serializers.SerializerMethodField()
+    rating = serializers.IntegerField(min_value=1, max_value=5)
 
     class Meta:
         model = Review

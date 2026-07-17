@@ -148,7 +148,7 @@ export default function HomePage({ navigate, user }) {
   React.useEffect(() => {
     carsApi.list({ sort: 'recent' })
       .then(r => {
-        const cars = r.data.slice(0, 3);
+        const cars = r.data.slice(0, 6);
         setFeatured(cars);
         const map = {};
         cars.forEach(c => { if (c.seller) map[c.id] = c.seller; });

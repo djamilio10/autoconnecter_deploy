@@ -1,14 +1,22 @@
 import axios from 'axios';
 
-// ── Helpers tokens ──────────────────────────────────────────────────────────
-const TOKEN_KEYS = ['access_token', 'refresh_token', 'user'];
-export const clearAuth = () => TOKEN_KEYS.forEach(k => localStorage.removeItem(k));
-export const getAccessToken = () => localStorage.getItem('access_token');
-export const getRefreshToken = () => localStorage.getItem('refresh_token');
+// ── Tokens : access en mémoire (anti-XSS), refresh en cookie HttpOnly (serveur) ─
+// L'access n'est PAS persisté en localStorage : un script injecté (XSS) ne peut donc
+// pas le lire. Au refresh de page, la mémoire est perdue mais l'access est restauré
+// via /token/refresh qui lit le cookie HttpOnly (inaccessible au JS).
+let _accessToken = null;
+export const getAccessToken = () => _accessToken;
+export const setAccessToken = (t) => { _accessToken = t || null; };
+export const clearAuth = () => {
+  _accessToken = null;
+  // Nettoyage des anciennes clés au cas où un client serait migré depuis l'ancienne version.
+  ['access_token', 'refresh_token', 'user'].forEach(k => localStorage.removeItem(k));
+};
 
 // ── Instance axios ──────────────────────────────────────────────────────────
 const BASE_URL = import.meta.env.VITE_API_URL || '/api';
-const api = axios.create({ baseURL: BASE_URL });
+// withCredentials envoie automatiquement le cookie refresh aux endpoints concernés.
+const api = axios.create({ baseURL: BASE_URL, withCredentials: true });
 
 api.interceptors.request.use(config => {
   const token = getAccessToken();
@@ -16,8 +24,33 @@ api.interceptors.request.use(config => {
   return config;
 });
 
-// ── Refresh token : protection anti-recursion + une seule requete a la fois ─
+// ── Refresh : protection anti-recursion + une seule requete a la fois ──────
 let refreshPromise = null;
+
+const doRefresh = () => {
+  if (!refreshPromise) {
+    refreshPromise = axios
+      .post(`${BASE_URL}/token/refresh/`, {}, { withCredentials: true })
+      .then(({ data }) => {
+        setAccessToken(data.access);
+        return data.access;
+      })
+      .finally(() => { refreshPromise = null; });
+  }
+  return refreshPromise;
+};
+
+/** Tente de restaurer l'access token au démarrage de l'app via le cookie refresh.
+ *  Renvoie true si l'utilisateur est authentifié, false sinon. */
+export const bootstrapAuth = async () => {
+  try {
+    await doRefresh();
+    return true;
+  } catch {
+    setAccessToken(null);
+    return false;
+  }
+};
 
 api.interceptors.response.use(
   response => response,
@@ -25,10 +58,6 @@ api.interceptors.response.use(
     const original = error.config;
     const status = error.response?.status;
 
-    // Pas de retry si :
-    //  - pas de 401, ou
-    //  - deja retente, ou
-    //  - on est sur une route auth (login/register/refresh) -> evite la boucle
     if (
       status !== 401 ||
       original?._retry ||
@@ -39,28 +68,10 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    const refresh = getRefreshToken();
-    if (!refresh) {
-      clearAuth();
-      window.dispatchEvent(new CustomEvent('auth:logout'));
-      return Promise.reject(error);
-    }
-
     original._retry = true;
 
     try {
-      // Une seule promesse de refresh partagee entre tous les appels concurrents
-      if (!refreshPromise) {
-        refreshPromise = axios
-          .post(`${BASE_URL}/token/refresh/`, { refresh })
-          .then(({ data }) => {
-            localStorage.setItem('access_token', data.access);
-            if (data.refresh) localStorage.setItem('refresh_token', data.refresh);
-            return data.access;
-          })
-          .finally(() => { refreshPromise = null; });
-      }
-      const newAccess = await refreshPromise;
+      const newAccess = await doRefresh();
       original.headers.Authorization = `Bearer ${newAccess}`;
       return api(original);
     } catch (refreshErr) {
@@ -76,16 +87,16 @@ export const authApi = {
   register: d => api.post('/auth/register/', d),
   verifyEmail: d => api.post('/auth/verify-email/', d),
   resendVerification: email => api.post('/auth/resend-verification/', { email }),
+  requestPasswordReset: email => api.post('/auth/password-reset/request/', { email }),
+  confirmPasswordReset: d => api.post('/auth/password-reset/confirm/', d),
   login: d => api.post('/auth/login/', d),
-  logout: () => {
-    const refresh = getRefreshToken();
-    return api.post('/auth/logout/', refresh ? { refresh } : {})
-      .catch(() => null) // ne bloque jamais le client si serveur down
-      .finally(clearAuth);
-  },
+  logout: () => api.post('/auth/logout/').catch(() => null).finally(clearAuth),
   profile: () => api.get('/auth/profile/'),
   updateProfile: d => api.patch('/auth/profile/update/', d),
   changePassword: d => api.post('/auth/change-password/', d),
+  twoFactorSetup: () => api.post('/auth/2fa/setup/'),
+  twoFactorEnable: code => api.post('/auth/2fa/enable/', { code }),
+  twoFactorDisable: code => api.post('/auth/2fa/disable/', { code }),
   uploadAvatar: (file) => {
     const fd = new FormData();
     fd.append('avatar', file);
@@ -113,6 +124,8 @@ export const sellersApi = {
   list: () => api.get('/sellers/'),
   detail: id => api.get(`/sellers/${id}/`),
   requestPremium: () => api.post('/sellers/premium/request/'),
+  premiumCheckout: (d) => api.post('/premium/checkout/', d),
+  premiumStatus: (ref) => api.get('/premium/status/', { params: { ref } }),
   uploadLogo: (file) => {
     const fd = new FormData();
     fd.append('logo', file);

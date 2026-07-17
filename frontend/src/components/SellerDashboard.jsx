@@ -1,5 +1,5 @@
 import React from 'react';
-import { C, StatusBadge, Spinner, Btn, toCFA, Input } from './Shared';
+import { C, StatusBadge, Spinner, Btn, toCFA, Input, CGUModal } from './Shared';
 import { dashboardApi, appointmentsApi, carsApi, sellersApi, rentalApi } from '../api';
 
 // Convertit un File en data URL pour la prévisualisation locale
@@ -432,24 +432,24 @@ function RentalTab({ rentalRequests, onRefresh }) {
 
 // ── Onglet Abonnement Premium ─────────────────────────────────────────────────
 function PremiumTab({ seller, onRefresh }) {
-  const [requesting, setRequesting] = React.useState(false);
-  const [done, setDone] = React.useState(false);
+  const [paying, setPaying] = React.useState(false);
+  const [cguAccepted, setCguAccepted] = React.useState(false);
+  const [showCgu, setShowCgu] = React.useState(false);
 
   const isPremium = seller?.plan === 'premium';
-  const isRequested = seller?.premium_requested;
   const activeUntil = seller?.premium_until ? new Date(seller.premium_until).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : null;
   const activeCars = seller ? (seller.car_count || 0) : 0;
 
-  const handleRequest = async () => {
-    setRequesting(true);
+  const handlePay = async () => {
+    if (!cguAccepted) return;
+    setPaying(true);
     try {
-      await sellersApi.requestPremium();
-      setDone(true);
-      onRefresh();
+      const r = await sellersApi.premiumCheckout({ cgu_accepted: true });
+      // Redirection vers la page de paiement PayTech.
+      window.location.href = r.data.redirect_url;
     } catch (e) {
-      alert(e.response?.data?.error || 'Erreur');
-    } finally {
-      setRequesting(false);
+      alert(e.response?.data?.detail || e.response?.data?.error || 'Le paiement n\'a pas pu être initié.');
+      setPaying(false);
     }
   };
 
@@ -551,7 +551,7 @@ function PremiumTab({ seller, onRefresh }) {
                 Abonnement Premium
               </h3>
               <div style={{ fontFamily: C.dm, fontSize: 13, color: C.muted, lineHeight: 1.6 }}>
-                Notre équipe vous contactera par téléphone ou email sous 24h pour valider votre abonnement et organiser le paiement (Wave, Orange Money ou virement).
+                Paiement 100 % en ligne et sécurisé via PayTech (carte bancaire, Orange Money, Wave, Free Money…). Votre Premium est activé dès la confirmation du paiement.
               </div>
             </div>
             <div style={{ textAlign: 'right', flexShrink: 0 }}>
@@ -560,35 +560,47 @@ function PremiumTab({ seller, onRefresh }) {
             </div>
           </div>
 
-          {isRequested || done ? (
-            <div style={{
-              background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.3)',
-              borderRadius: 12, padding: '16px 20px', display: 'flex', gap: 12, alignItems: 'center',
-            }}>
-              <span style={{ fontSize: 20 }}>✅</span>
-              <div>
-                <div style={{ fontFamily: C.dm, fontSize: 14, fontWeight: 600, color: '#4ade80' }}>
-                  Demande envoyée
-                </div>
-                <div style={{ fontFamily: C.dm, fontSize: 13, color: C.muted, marginTop: 2 }}>
-                  Notre équipe vous contactera sous 24h pour finaliser votre abonnement.
-                </div>
-              </div>
-            </div>
-          ) : (
-            <button onClick={handleRequest} disabled={requesting} style={{
-              width: '100%', padding: '16px',
-              background: 'linear-gradient(135deg, rgba(201,169,110,0.2), rgba(201,169,110,0.08))',
-              border: `1px solid ${C.goldBorder}`, borderRadius: 12,
-              color: C.gold, fontFamily: C.dm, fontSize: 15, fontWeight: 700,
-              cursor: requesting ? 'not-allowed' : 'pointer',
-              opacity: requesting ? 0.7 : 1,
-            }}>
-              {requesting ? 'Envoi...' : '⭐ Demander le Premium — 5 000 FCFA/mois'}
-            </button>
-          )}
+          <CguConsent accepted={cguAccepted} onToggle={setCguAccepted} onOpen={() => setShowCgu(true)} />
+
+          <button onClick={handlePay} disabled={paying || !cguAccepted} style={{
+            width: '100%', padding: '16px', marginTop: 16,
+            background: 'linear-gradient(135deg, rgba(201,169,110,0.2), rgba(201,169,110,0.08))',
+            border: `1px solid ${C.goldBorder}`, borderRadius: 12,
+            color: C.gold, fontFamily: C.dm, fontSize: 15, fontWeight: 700,
+            cursor: (paying || !cguAccepted) ? 'not-allowed' : 'pointer',
+            opacity: (paying || !cguAccepted) ? 0.55 : 1,
+          }}>
+            {paying ? 'Redirection vers le paiement…' : '⭐ Payer maintenant — 5 000 FCFA/mois'}
+          </button>
         </div>
       )}
+
+      {showCgu && <CGUModal onClose={() => setShowCgu(false)} />}
+    </div>
+  );
+}
+
+// Case à cocher CGU obligatoire + lien ouvrant le pop-up des conditions.
+function CguConsent({ accepted, onToggle, onOpen }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+      <input
+        type="checkbox"
+        id="cgu-consent"
+        checked={accepted}
+        onChange={e => onToggle(e.target.checked)}
+        style={{ width: 18, height: 18, marginTop: 1, accentColor: C.gold, cursor: 'pointer', flexShrink: 0 }}
+      />
+      <label htmlFor="cgu-consent" style={{ fontFamily: C.dm, fontSize: 13, color: C.muted, lineHeight: 1.6, cursor: 'pointer' }}>
+        J'ai lu et j'accepte les{' '}
+        <span
+          onClick={(e) => { e.preventDefault(); onOpen(); }}
+          style={{ color: C.gold, textDecoration: 'underline', cursor: 'pointer' }}
+        >
+          Conditions Générales d'Utilisation
+        </span>
+        , notamment le renouvellement mensuel sur action de ma part (sans prélèvement automatique).
+      </label>
     </div>
   );
 }
@@ -605,17 +617,17 @@ function EmptyState({ icon, text }) {
 // ── Modale d'upgrade Premium ──────────────────────────────────────────────────
 function PremiumUpgradeModal({ onClose, onRequested }) {
   const [loading, setLoading] = React.useState(false);
-  const [done, setDone] = React.useState(false);
+  const [cguAccepted, setCguAccepted] = React.useState(false);
+  const [showCgu, setShowCgu] = React.useState(false);
 
-  const handleRequest = async () => {
+  const handlePay = async () => {
+    if (!cguAccepted) return;
     setLoading(true);
     try {
-      await sellersApi.requestPremium();
-      setDone(true);
-      onRequested?.();
+      const r = await sellersApi.premiumCheckout({ cgu_accepted: true });
+      window.location.href = r.data.redirect_url;
     } catch (e) {
-      alert(e.response?.data?.error || 'Une erreur est survenue.');
-    } finally {
+      alert(e.response?.data?.detail || e.response?.data?.error || 'Le paiement n\'a pas pu être initié.');
       setLoading(false);
     }
   };
@@ -681,25 +693,19 @@ function PremiumUpgradeModal({ onClose, onRequested }) {
           ))}
         </div>
 
-        {done ? (
-          <div style={{
-            background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.3)',
-            borderRadius: 12, padding: '14px', textAlign: 'center',
-            fontFamily: C.dm, fontSize: 14, color: '#4ade80', marginBottom: 16,
-          }}>
-            ✅ Demande envoyée ! L'équipe vous contactera sous 24h.
-          </div>
-        ) : (
-          <button onClick={handleRequest} disabled={loading} style={{
-            width: '100%', padding: '14px',
-            background: loading ? 'rgba(201,169,110,0.4)' : C.gold,
-            border: 'none', color: C.bg, fontFamily: C.dm,
-            fontSize: 15, fontWeight: 700, borderRadius: 12,
-            cursor: loading ? 'not-allowed' : 'pointer', marginBottom: 12,
-          }}>
-            {loading ? 'Envoi...' : '⭐ Demander l\'accès Premium'}
-          </button>
-        )}
+        <div style={{ marginBottom: 16 }}>
+          <CguConsent accepted={cguAccepted} onToggle={setCguAccepted} onOpen={() => setShowCgu(true)} />
+        </div>
+
+        <button onClick={handlePay} disabled={loading || !cguAccepted} style={{
+          width: '100%', padding: '14px',
+          background: (loading || !cguAccepted) ? 'rgba(201,169,110,0.35)' : C.gold,
+          border: 'none', color: C.bg, fontFamily: C.dm,
+          fontSize: 15, fontWeight: 700, borderRadius: 12,
+          cursor: (loading || !cguAccepted) ? 'not-allowed' : 'pointer', marginBottom: 12,
+        }}>
+          {loading ? 'Redirection vers le paiement…' : '⭐ Payer maintenant — 5 000 FCFA/mois'}
+        </button>
 
         <button onClick={onClose} style={{
           width: '100%', padding: '12px',
@@ -708,6 +714,8 @@ function PremiumUpgradeModal({ onClose, onRequested }) {
           borderRadius: 12, cursor: 'pointer',
         }}>Fermer</button>
       </div>
+
+      {showCgu && <CGUModal onClose={() => setShowCgu(false)} />}
     </div>
   );
 }

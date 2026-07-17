@@ -1,5 +1,27 @@
-Django>=4.2,<5.0
-djangorestframework>=3.14
-djangorestframework-simplejwt>=5.3
-django-cors-headers>=4.3
-python-dotenv>=1.0
+# Bornes hautes (OWASP A06) : bloquent les majors potentiellement cassants/non audités
+# tout en laissant passer les correctifs de sécurité (patchs/minors).
+Django>=4.2.30,<5.0
+djangorestframework>=3.17.1,<4.0
+djangorestframework-simplejwt>=5.5.1,<6.0
+django-cors-headers>=4.9.0,<5.0
+python-dotenv>=1.2.2,<2.0
+gunicorn>=26.0.0,<27.0
+django-ratelimit>=4.1.0,<5.0
+Pillow>=12.2.0,<13.0
+redis>=5.0,<9.0
+# Hachage de mots de passe Argon2 (perf + sécurité). Activé automatiquement si présent.
+argon2-cffi>=23.1,<26.0
+# PostgreSQL en production (via DATABASE_URL). SQLite reste le repli en dev.
+dj-database-url>=2.1,<4.0
+psycopg2-binary>=2.9,<3.0
+# WhiteNoise : sert les fichiers statiques (admin Django) en production.
+whitenoise>=6.7,<7.0
+# requests : appels HTTP serveur→serveur vers l'API PayTech (initiation de paiement).
+requests>=2.32,<3.0
+# pyotp : codes TOTP (2FA via application d'authentification type Google Authenticator).
+pyotp>=2.9,<3.0
+# qrcode : génère le QR code d'enrôlement 2FA (PNG via Pillow, déjà présent).
+qrcode>=7.4,<9.0
+# truststore : utilise le magasin de certificats de l'OS pour la vérification TLS
+# (corrige les CERTIFICATE_VERIFY_FAILED derrière un antivirus/proxy interceptant le TLS).
+truststore>=0.9,<1.0
