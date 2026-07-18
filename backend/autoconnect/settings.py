@@ -106,6 +106,18 @@ WSGI_APPLICATION = 'autoconnect.wsgi.application'
 # connexion Postgres à chaque requête → gros gain de latence) ; conn_health_checks
 # vérifie qu'une connexion réutilisée est toujours vivante.
 DATABASE_URL = env('DATABASE_URL', '')
+
+# En Docker, POSTGRES_* sont fournis via env_file : on construit l'URL ici,
+# sans dépendre de l'interpolation docker-compose (qui exigerait un fichier .env).
+if not DATABASE_URL:
+    pg_user = env('POSTGRES_USER', '')
+    pg_pass = env('POSTGRES_PASSWORD', '')
+    pg_db = env('POSTGRES_DB', '')
+    pg_host = env('POSTGRES_HOST', 'db')
+    pg_port = env('POSTGRES_PORT', '5432')
+    if pg_user and pg_pass and pg_db:
+        DATABASE_URL = f'postgresql://{pg_user}:{pg_pass}@{pg_host}:{pg_port}/{pg_db}?sslmode=disable'
+
 if DATABASE_URL:
     import dj_database_url
     DATABASES = {
@@ -113,7 +125,9 @@ if DATABASE_URL:
             DATABASE_URL,
             conn_max_age=600,
             conn_health_checks=True,
-            ssl_require=not DEBUG,  # impose TLS vers la base en production
+            # TLS désactivé par défaut : la base tourne sur le réseau Docker
+            # interne privé. Mettre DB_SSL_REQUIRE=True si la base est distante.
+            ssl_require=env('DB_SSL_REQUIRE', 'False', cast=bool),
         )
     }
 else:

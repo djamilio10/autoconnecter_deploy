@@ -2,10 +2,9 @@ services:
   db:
     image: postgres:16-alpine
     restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-autoconnect}
-      POSTGRES_USER: ${POSTGRES_USER:-autoconnect}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    # Lit POSTGRES_DB / POSTGRES_USER / POSTGRES_PASSWORD directement dans
+    # .env.production (plus besoin d'un fichier .env pour l'interpolation).
+    env_file: .env.production
     volumes:
       - db_data:/var/lib/postgresql/data
     healthcheck:
@@ -23,11 +22,11 @@ services:
   backend:
     build: ./backend
     restart: unless-stopped
+    # Toutes les variables (POSTGRES_*, SECRET_KEY, EMAIL_*, PAYTECH_*, ...)
+    # viennent de .env.production. L'URL de la base est construite dans
+    # settings.py à partir de POSTGRES_* : pas d'interpolation docker-compose.
     env_file: .env.production
     environment:
-      # sslmode=disable : Postgres tourne en local sur le réseau Docker interne,
-      # pas de TLS à négocier (settings.py impose ssl_require=True en prod sinon).
-      DATABASE_URL: postgresql://${POSTGRES_USER:-autoconnect}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-autoconnect}?sslmode=disable
       REDIS_URL: redis://redis:6379
     volumes:
       - media_data:/app/media
