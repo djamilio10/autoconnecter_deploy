@@ -17,6 +17,9 @@ frontend/.env
 frontend/.env.local
 frontend/.env.production
 
+# Déploiement (secrets réels, pas le .example)
+/.env.production
+
 # OS
 .DS_Store
 Thumbs.db

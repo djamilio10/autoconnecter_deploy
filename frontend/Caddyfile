@@ -1,0 +1,14 @@
+autoconnect.site, www.autoconnect.site {
+    encode gzip
+
+    @backend path /api/* /admin/* /static/* /media/*
+    handle @backend {
+        reverse_proxy backend:8000
+    }
+
+    handle {
+        root * /srv
+        try_files {path} /index.html
+        file_server
+    }
+}
