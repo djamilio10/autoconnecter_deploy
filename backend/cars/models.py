@@ -115,7 +115,9 @@ class Car(models.Model):
     mileage = models.IntegerField()
     fuel = models.CharField(max_length=20, choices=FUEL_CHOICES)
     transmission = models.CharField(max_length=20, choices=TRANSMISSION_CHOICES)
-    power = models.CharField(max_length=50)
+    # Facultatif : beaucoup de vendeurs particuliers ne connaissent pas la
+    # puissance exacte de leur véhicule. Le formulaire ne l'a jamais exigée.
+    power = models.CharField(max_length=50, blank=True)
     color = models.CharField(max_length=100)
     doors = models.IntegerField(default=4)
     seats = models.IntegerField(default=5)
