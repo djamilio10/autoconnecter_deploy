@@ -32,13 +32,13 @@ export default function BuyerDashboard({ user, navigate, favorites, onToggleFavo
   return (
     <div style={{ minHeight: '100vh', background: C.bg, paddingTop: 64 }}>
       {/* Header */}
-      <div style={{ borderBottom: `1px solid ${C.border2}`, padding: '40px 32px 32px', maxWidth: 1280, margin: '0 auto' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="ac-page-header" style={{ borderBottom: `1px solid ${C.border2}`, padding: '40px 32px 32px', maxWidth: 1280, margin: '0 auto' }}>
+        <div className="ac-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <div style={{ fontFamily: C.dm, fontSize: 13, color: C.gold, letterSpacing: '0.06em', marginBottom: 8, textTransform: 'uppercase' }}>
               Espace Acheteur
             </div>
-            <h1 style={{ fontFamily: C.playfair, fontSize: 36, color: C.text, margin: 0, fontWeight: 700 }}>
+            <h1 className="ac-h1" style={{ fontFamily: C.playfair, fontSize: 36, color: C.text, margin: 0, fontWeight: 700 }}>
               Bonjour, {user?.first_name || 'Acheteur'} 👋
             </h1>
           </div>
@@ -46,9 +46,9 @@ export default function BuyerDashboard({ user, navigate, favorites, onToggleFavo
         </div>
       </div>
 
-      <div style={{ maxWidth: 1280, margin: '0 auto', padding: '32px' }}>
+      <div className="ac-container" style={{ maxWidth: 1280, margin: '0 auto', padding: '32px' }}>
         {/* Quick stats */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20, marginBottom: 40 }}>
+        <div className="ac-grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20, marginBottom: 40 }}>
           {[
             { icon: '📅', val: upcoming.length, label: 'Rendez-vous à venir' },
             { icon: '♥', val: favCars.length, label: 'Véhicules favoris' },
@@ -63,7 +63,7 @@ export default function BuyerDashboard({ user, navigate, favorites, onToggleFavo
         </div>
 
         {/* Tabs */}
-        <div style={{ display: 'flex', gap: 0, borderBottom: `1px solid ${C.border}`, marginBottom: 32 }}>
+        <div className="ac-tabs" style={{ display: 'flex', gap: 0, borderBottom: `1px solid ${C.border}`, marginBottom: 32 }}>
           {TABS.map((t, i) => (
             <button key={t} onClick={() => setTab(i)} style={{
               background: 'none', border: 'none', color: tab === i ? C.gold : C.muted,
@@ -87,7 +87,7 @@ export default function BuyerDashboard({ user, navigate, favorites, onToggleFavo
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {appointments.map(a => (
-                  <div key={a.id} style={{
+                  <div key={a.id} className="ac-grid-2" style={{
                     background: C.surface, border: `1px solid ${C.border}`,
                     borderRadius: 16, padding: '20px 24px',
                     display: 'grid', gridTemplateColumns: '1fr auto',
@@ -205,7 +205,7 @@ export default function BuyerDashboard({ user, navigate, favorites, onToggleFavo
                 <Btn onClick={() => navigate('catalogue')}>Explorer le catalogue</Btn>
               </div>
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20 }}>
+              <div className="ac-cards-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20 }}>
                 {favCars.map(car => (
                   <CarCard
                     key={car.id}

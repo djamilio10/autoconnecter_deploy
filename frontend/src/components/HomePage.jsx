@@ -173,7 +173,7 @@ export default function HomePage({ navigate, user }) {
           pointerEvents: 'none',
         }} />
 
-        <div style={{ maxWidth: 1280, margin: '0 auto', padding: '0 32px', display: 'grid', gridTemplateColumns: '1fr 1.1fr', gap: 64, alignItems: 'center', width: '100%' }}>
+        <div className="ac-container ac-split ac-hero-grid" style={{ maxWidth: 1280, margin: '0 auto', padding: '0 32px', display: 'grid', gridTemplateColumns: '1fr 1.1fr', gap: 64, alignItems: 'center', width: '100%' }}>
           {/* Left */}
           <div>
             <div style={{
@@ -182,7 +182,7 @@ export default function HomePage({ navigate, user }) {
               padding: '6px 14px', borderRadius: 20, marginBottom: 28, letterSpacing: '0.08em',
             }}>🇸🇳 Plateforme N°1 au Sénégal</div>
 
-            <h1 style={{ fontFamily: C.playfair, fontSize: 62, fontWeight: 700, color: C.text, lineHeight: 1.1, marginBottom: 24 }}>
+            <h1 className="ac-hero-title" style={{ fontFamily: C.playfair, fontSize: 62, fontWeight: 700, color: C.text, lineHeight: 1.1, marginBottom: 24 }}>
               Trouvez votre<br />
               <span style={{ color: C.gold, fontStyle: 'italic' }}>voiture idéale</span>,<br />
               rencontrez le vendeur.
@@ -193,7 +193,7 @@ export default function HomePage({ navigate, user }) {
               Réservez un essai, rencontrez le vendeur, achetez en toute confiance.
             </p>
 
-            <div style={{ display: 'flex', gap: 14 }}>
+            <div className="ac-cta-row" style={{ display: 'flex', gap: 14 }}>
               <Btn onClick={() => navigate('catalogue')} style={{ fontSize: 15, padding: '14px 28px' }}>
                 Explorer les annonces
               </Btn>
@@ -203,7 +203,7 @@ export default function HomePage({ navigate, user }) {
             </div>
 
             {/* Stats */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 24, marginTop: 56, paddingTop: 40, borderTop: `1px solid ${C.border2}` }}>
+            <div className="ac-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 24, marginTop: 56, paddingTop: 40, borderTop: `1px solid ${C.border2}` }}>
               {STATS.map(s => (
                 <div key={s.value}>
                   <div style={{ fontFamily: C.playfair, fontSize: 26, fontWeight: 700, color: C.gold }}>{s.value}</div>
@@ -225,12 +225,12 @@ export default function HomePage({ navigate, user }) {
       </section>
 
       {/* ── How it works ── */}
-      <section style={{ padding: '100px 32px', maxWidth: 1280, margin: '0 auto' }}>
+      <section className="ac-section" style={{ padding: '100px 32px', maxWidth: 1280, margin: '0 auto' }}>
         <div style={{ textAlign: 'center', marginBottom: 64 }}>
           <div style={{ fontFamily: C.dm, fontSize: 12, color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 16 }}>PROCESSUS SIMPLIFIÉ</div>
-          <h2 style={{ fontFamily: C.playfair, fontSize: 42, color: C.text, fontWeight: 700 }}>Comment ça marche ?</h2>
+          <h2 className="ac-h2" style={{ fontFamily: C.playfair, fontSize: 42, color: C.text, fontWeight: 700 }}>Comment ça marche ?</h2>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 40 }}>
+        <div className="ac-grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 40 }}>
           {STEPS.map(s => (
             <div key={s.n} style={{
               background: C.surface, border: `1px solid ${C.border}`,
@@ -246,15 +246,15 @@ export default function HomePage({ navigate, user }) {
 
       {/* ── Featured Cars ── */}
       {featured.length > 0 && (
-        <section style={{ padding: '0 32px 100px', maxWidth: 1280, margin: '0 auto' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 40 }}>
+        <section className="ac-section" style={{ padding: '0 32px 100px', maxWidth: 1280, margin: '0 auto' }}>
+          <div className="ac-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 40 }}>
             <div>
               <div style={{ fontFamily: C.dm, fontSize: 12, color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 10 }}>SÉLECTION</div>
-              <h2 style={{ fontFamily: C.playfair, fontSize: 36, color: C.text, fontWeight: 700 }}>Annonces à la une</h2>
+              <h2 className="ac-h2" style={{ fontFamily: C.playfair, fontSize: 36, color: C.text, fontWeight: 700 }}>Annonces à la une</h2>
             </div>
             <Btn variant="secondary" onClick={() => navigate('catalogue')}>Voir tout le catalogue →</Btn>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24 }}>
+          <div className="ac-cards-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24 }}>
             {featured.map(car => (
               <CarCard
                 key={car.id}
@@ -268,14 +268,14 @@ export default function HomePage({ navigate, user }) {
       )}
 
       {/* ── Seller CTA ── */}
-      <section style={{
+      <section className="ac-cta-band" style={{
         margin: '0 32px 80px', maxWidth: 1280, marginLeft: 'auto', marginRight: 'auto',
         background: 'linear-gradient(135deg, #0f0e09 0%, #1a1608 50%, #0f0e09 100%)',
         border: `1px solid rgba(201,169,110,0.2)`, borderRadius: 24, padding: '60px 64px',
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 24,
       }}>
         <div>
-          <h2 style={{ fontFamily: C.playfair, fontSize: 36, color: C.text, fontWeight: 700, marginBottom: 12 }}>
+          <h2 className="ac-h2" style={{ fontFamily: C.playfair, fontSize: 36, color: C.text, fontWeight: 700, marginBottom: 12 }}>
             Vendez votre voiture<br /><span style={{ color: C.gold }}>rapidement et sereinement</span>
           </h2>
           <p style={{ fontFamily: C.dm, fontSize: 15, color: C.muted, maxWidth: 480 }}>
@@ -290,7 +290,7 @@ export default function HomePage({ navigate, user }) {
       </section>
 
       {/* Footer */}
-      <footer style={{ borderTop: `1px solid ${C.border2}`, padding: '40px 32px', maxWidth: 1280, margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <footer className="ac-wrap" style={{ borderTop: `1px solid ${C.border2}`, padding: '40px 32px', maxWidth: 1280, margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <svg width="22" height="22" viewBox="0 0 32 32" fill="none">
             <circle cx="11" cy="16" r="9" stroke={C.gold} strokeWidth="2" />

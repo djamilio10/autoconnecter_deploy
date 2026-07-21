@@ -80,7 +80,8 @@ export const Logo = ({ size = 'md', onClick }) => {
   return (
     <div
       onClick={onClick}
-      style={{ display: 'flex', alignItems: 'center', gap: s.gap, cursor: onClick ? 'pointer' : 'default' }}
+      className="ac-logo"
+      style={{ display: 'flex', alignItems: 'center', gap: s.gap, cursor: onClick ? 'pointer' : 'default', flexShrink: 0 }}
     >
       <LogoIcon size={s.icon} />
 

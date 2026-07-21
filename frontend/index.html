@@ -19,62 +19,8 @@
     ::-webkit-scrollbar-thumb { background: #27272A; border-radius: 3px; }
     ::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
 
-    /* Hamburger caché par défaut (desktop) */
-    .ac-nav-burger { display: none; }
-
-    /* ── Responsive mobile ──────────────────────────────────────────── */
-    @media (max-width: 768px) {
-      /* Navbar — on cache UNIQUEMENT les liens de navigation,
-         pas la section auth/utilisateur (Connexion / S'inscrire / avatar) */
-      .ac-nav-links { display: none !important; }
-      .ac-nav-burger { display: block !important; }
-      .ac-nav { padding: 0 12px !important; }
-      .ac-nav-auth { gap: 6px !important; }
-      .ac-auth-btns { gap: 6px !important; }
-      .ac-btn-login { padding: 7px 12px !important; font-size: 13px !important; }
-      .ac-btn-register { padding: 7px 14px !important; font-size: 13px !important; }
-      .ac-user-btn { padding: 6px 10px !important; font-size: 12px !important; }
-      .ac-user-name { max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      /* Hero */
-      .ac-hero-title { font-size: 32px !important; }
-      .ac-hero-sub { font-size: 15px !important; }
-      .ac-hero-actions { flex-direction: column !important; gap: 10px !important; }
-      /* Grids */
-      .ac-grid-3 { grid-template-columns: 1fr !important; }
-      .ac-grid-2 { grid-template-columns: 1fr !important; }
-      .ac-grid-auto { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)) !important; }
-      /* Cards */
-      .ac-page { padding: 88px 16px 40px !important; }
-      /* Sections */
-      .ac-section { padding: 48px 16px !important; }
-      /* Stats row */
-      .ac-stats { flex-wrap: wrap !important; gap: 12px !important; }
-      .ac-stats > * { flex: 1 1 calc(50% - 6px) !important; min-width: 120px !important; }
-      /* Filters */
-      .ac-filters { flex-direction: column !important; }
-      .ac-filters > * { width: 100% !important; }
-      /* Detail layout */
-      .ac-detail-grid { flex-direction: column !important; }
-      /* Auth */
-      .ac-auth-card { padding: 24px 20px !important; }
-      /* Dashboard tabs */
-      .ac-tabs { flex-wrap: wrap !important; gap: 6px !important; }
-      .ac-tabs > * { flex: 1 1 auto !important; font-size: 12px !important; padding: 8px 10px !important; }
-      /* Messages */
-      .ac-msg-layout { flex-direction: column !important; }
-      .ac-msg-sidebar { width: 100% !important; max-height: 260px !important; border-right: none !important; border-bottom: 1px solid #27272A !important; }
-    }
-
-    @media (max-width: 480px) {
-      .ac-hero-title { font-size: 26px !important; }
-      .ac-car-card-img { height: 160px !important; }
-      .ac-stats > * { flex: 1 1 100% !important; }
-      /* Sur très petits écrans, on raccourcit Connexion -> icône optionnelle,
-         et on réduit encore la taille des boutons auth */
-      .ac-btn-login { padding: 6px 10px !important; font-size: 12px !important; }
-      .ac-btn-register { padding: 6px 12px !important; font-size: 12px !important; }
-      .ac-admin-btn { display: none !important; }
-    }
+    /* Le responsive mobile est centralisé dans src/styles/responsive.css
+       (importé par main.jsx) : classes ac-* + media queries. */
   </style>
 </head>
 <body>

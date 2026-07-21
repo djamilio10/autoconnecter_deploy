@@ -66,7 +66,7 @@ export default function CarDetail({ carId, navigate, user, favorites, onToggleFa
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, paddingTop: 64 }}>
-      <div style={{ maxWidth: 1280, margin: '0 auto', padding: '24px 32px 0' }}>
+      <div className="ac-container" style={{ maxWidth: 1280, margin: '0 auto', padding: '24px 32px 0' }}>
         <button onClick={() => navigate('catalogue')} style={{
           background: 'none', border: 'none', color: C.muted, fontFamily: C.dm,
           fontSize: 14, cursor: 'pointer', padding: 0,
@@ -76,11 +76,11 @@ export default function CarDetail({ carId, navigate, user, favorites, onToggleFa
         >← Retour au catalogue</button>
       </div>
 
-      <div style={{ maxWidth: 1280, margin: '0 auto', padding: '24px 32px 80px', display: 'grid', gridTemplateColumns: '1fr 360px', gap: 40 }}>
+      <div className="ac-container ac-split" style={{ maxWidth: 1280, margin: '0 auto', padding: '24px 32px 80px', display: 'grid', gridTemplateColumns: '1fr 360px', gap: 40 }}>
         {/* Left */}
         <div>
           {/* Hero image */}
-          <div style={{
+          <div className="ac-detail-hero" style={{
             height: 420, borderRadius: 20, background: car.gradient || C.surface,
             border: `1px solid ${C.border}`, marginBottom: 12,
             position: 'relative', overflow: 'hidden',
@@ -146,8 +146,8 @@ export default function CarDetail({ carId, navigate, user, favorites, onToggleFa
           )}
 
           {/* Title + price */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-            <h1 style={{ fontFamily: C.playfair, fontSize: 42, color: C.text, margin: 0, fontWeight: 700 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8, gap: 12 }}>
+            <h1 className="ac-h1" style={{ fontFamily: C.playfair, fontSize: 42, color: C.text, margin: 0, fontWeight: 700 }}>
               {car.make} <span style={{ fontWeight: 400 }}>{car.model}</span>
             </h1>
             <button onClick={() => onToggleFavorite(car.id)} style={{
@@ -172,7 +172,7 @@ export default function CarDetail({ carId, navigate, user, favorites, onToggleFa
 
           {/* Specs grid */}
           <h3 style={{ fontFamily: C.dm, fontSize: 13, fontWeight: 600, color: C.text, letterSpacing: '0.06em', textTransform: 'uppercase', margin: '0 0 20px' }}>Caractéristiques</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 36 }}>
+          <div className="ac-specs-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 36 }}>
             {specs.map(s => (
               <div key={s.label} style={{
                 background: C.surface, border: `1px solid ${C.border}`,
@@ -186,7 +186,7 @@ export default function CarDetail({ carId, navigate, user, favorites, onToggleFa
 
           {/* Features */}
           <h3 style={{ fontFamily: C.dm, fontSize: 13, fontWeight: 600, color: C.text, letterSpacing: '0.06em', textTransform: 'uppercase', margin: '0 0 16px' }}>Équipements</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
+          <div className="ac-grid-2" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
             {(car.features || []).map(f => (
               <div key={f} style={{
                 display: 'flex', alignItems: 'center', gap: 10,
@@ -200,11 +200,11 @@ export default function CarDetail({ carId, navigate, user, favorites, onToggleFa
 
         {/* Report modal */}
         {showReport && (
-          <div style={{
+          <div className="ac-modal-overlay" style={{
             position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(5px)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300, padding: 20,
           }}>
-            <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 20, padding: 36, maxWidth: 480, width: '90%' }}>
+            <div className="ac-modal" style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 20, padding: 36, maxWidth: 480, width: '90%' }}>
               {reportDone ? (
                 <div style={{ textAlign: 'center', padding: '20px 0' }}>
                   <div style={{ fontSize: 48, marginBottom: 16 }}>✅</div>
@@ -261,7 +261,7 @@ export default function CarDetail({ carId, navigate, user, favorites, onToggleFa
 
         {/* Right sidebar */}
         <div>
-          <div style={{ position: 'sticky', top: 80 }}>
+          <div className="ac-unsticky" style={{ position: 'sticky', top: 80 }}>
             {/* Price card */}
             <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 20, padding: 28, marginBottom: 16 }}>
               <div style={{ fontFamily: C.playfair, fontSize: 38, fontWeight: 700, color: C.gold, marginBottom: 6 }}>

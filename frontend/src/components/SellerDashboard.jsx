@@ -75,13 +75,13 @@ export default function SellerDashboard({ user, navigate, platformSettings = {} 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, paddingTop: 64 }}>
       {/* Header */}
-      <div style={{ borderBottom: `1px solid ${C.border2}`, padding: '40px 32px 32px', maxWidth: 1280, margin: '0 auto' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="ac-page-header" style={{ borderBottom: `1px solid ${C.border2}`, padding: '40px 32px 32px', maxWidth: 1280, margin: '0 auto' }}>
+        <div className="ac-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <div style={{ fontFamily: C.dm, fontSize: 13, color: C.gold, letterSpacing: '0.06em', marginBottom: 8, textTransform: 'uppercase' }}>
               Dashboard Vendeur
             </div>
-            <h1 style={{ fontFamily: C.playfair, fontSize: 36, color: C.text, margin: 0, fontWeight: 700 }}>
+            <h1 className="ac-h1" style={{ fontFamily: C.playfair, fontSize: 36, color: C.text, margin: 0, fontWeight: 700 }}>
               Bonjour, {user?.first_name || 'Vendeur'} 👋
             </h1>
           </div>
@@ -89,9 +89,9 @@ export default function SellerDashboard({ user, navigate, platformSettings = {} 
         </div>
       </div>
 
-      <div style={{ maxWidth: 1280, margin: '0 auto', padding: '32px' }}>
+      <div className="ac-container" style={{ maxWidth: 1280, margin: '0 auto', padding: '32px' }}>
         {/* Stats */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20, marginBottom: 40 }}>
+        <div className="ac-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20, marginBottom: 40 }}>
           {STAT_CARDS.map(s => (
             <div key={s.label} style={{
               background: C.surface, border: `1px solid ${C.border}`,
@@ -105,7 +105,7 @@ export default function SellerDashboard({ user, navigate, platformSettings = {} 
         </div>
 
         {/* Tabs */}
-        <div style={{ display: 'flex', gap: 0, borderBottom: `1px solid ${C.border}`, marginBottom: 32 }}>
+        <div className="ac-tabs" style={{ display: 'flex', gap: 0, borderBottom: `1px solid ${C.border}`, marginBottom: 32 }}>
           {TABS.map((t, i) => (
             <button key={t} onClick={() => setTab(i)} style={{
               background: 'none', border: 'none', color: tab === i ? C.gold : C.muted,
@@ -136,9 +136,10 @@ export default function SellerDashboard({ user, navigate, platformSettings = {} 
         {/* Tab 1: Listings */}
         {tab === 1 && (
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+            <div className="ac-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
               <h3 style={{ fontFamily: C.playfair, fontSize: 22, color: C.text, margin: 0, fontWeight: 600 }}>Mes annonces ({cars.length})</h3>
               <button
+                className="ac-header-action"
                 onClick={() => {
                   const isPremium = data?.seller?.is_premium;
                   const activeCarsCount = stats.active_cars ?? 0;
@@ -160,7 +161,7 @@ export default function SellerDashboard({ user, navigate, platformSettings = {} 
             {cars.length === 0 ? (
               <EmptyState icon="🚗" text="Aucune annonce publiée — cliquez sur « + Nouvelle annonce » pour commencer" />
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 20 }}>
+              <div className="ac-cards-2" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 20 }}>
                 {cars.map(car => (
                   <div key={car.id} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, overflow: 'hidden' }}>
                     <div style={{ height: 160, background: car.gradient, position: 'relative', overflow: 'hidden' }}>
@@ -265,7 +266,7 @@ function AppointmentRow({ a, onUpdate, showActions }) {
       background: C.surface, border: `1px solid ${C.border}`,
       borderRadius: 12, padding: '16px 20px', gap: 20,
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 20 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontFamily: C.dm, fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 4 }}>
             {a.car?.make} {a.car?.model} {a.car?.year}
@@ -479,6 +480,7 @@ function PremiumTab({ seller, onRefresh }) {
         border: `1px solid ${isPremium ? C.goldBorder : C.border}`,
         borderRadius: 20, padding: 32, marginBottom: 28,
         display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 24,
+        flexWrap: 'wrap',
       }}>
         <div>
           <div style={{ fontFamily: C.dm, fontSize: 12, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>
@@ -545,7 +547,7 @@ function PremiumTab({ seller, onRefresh }) {
       {/* CTA */}
       {!isPremium && (
         <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 20, padding: 32 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 24, marginBottom: 24 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 24, marginBottom: 24, flexWrap: 'wrap' }}>
             <div>
               <h3 style={{ fontFamily: C.playfair, fontSize: 22, color: C.text, margin: '0 0 8px', fontWeight: 600 }}>
                 Abonnement Premium
@@ -642,12 +644,12 @@ function PremiumUpgradeModal({ onClose, onRequested }) {
   ];
 
   return (
-    <div style={{
+    <div className="ac-modal-overlay" style={{
       position: 'fixed', inset: 0, zIndex: 1000,
       background: 'rgba(0,0,0,0.88)', backdropFilter: 'blur(14px)',
       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
     }}>
-      <div style={{
+      <div className="ac-modal" style={{
         background: C.surface,
         border: `1px solid rgba(201,169,110,0.35)`,
         borderRadius: 24, padding: '40px 36px', maxWidth: 480, width: '100%',
@@ -910,6 +912,7 @@ function CarFormModal({ car, onClose, onSaved, onPremiumRequired }) {
     background: '#0e0e10', border: `1px solid ${C.border}`,
     color: C.text, fontFamily: C.dm, fontSize: 14,
     padding: '11px 14px', borderRadius: 10, outline: 'none',
+    width: '100%', boxSizing: 'border-box',
   };
 
   const hasImages = existingImages.length > 0 || previews.length > 0;
@@ -917,6 +920,7 @@ function CarFormModal({ car, onClose, onSaved, onPremiumRequired }) {
   return (
     <div
       onClick={onClose}
+      className="ac-modal-overlay"
       style={{
         position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
         backdropFilter: 'blur(8px)', zIndex: 1000,
@@ -926,6 +930,7 @@ function CarFormModal({ car, onClose, onSaved, onPremiumRequired }) {
     >
       <div
         onClick={e => e.stopPropagation()}
+        className="ac-modal"
         style={{
           background: C.surface, border: `1px solid ${C.border}`,
           borderRadius: 20, padding: 32, width: '100%', maxWidth: 720,
@@ -950,7 +955,7 @@ function CarFormModal({ car, onClose, onSaved, onPremiumRequired }) {
           }}>{apiError}</div>
         )}
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        <div className="ac-form-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
           <Input label="Marque" value={form.make} onChange={e => set('make', e.target.value)} placeholder="Toyota" error={errors.make} />
           <Input label="Modèle" value={form.model} onChange={e => set('model', e.target.value)} placeholder="Corolla" error={errors.model} />
           <Input label="Année" type="number" value={form.year} onChange={e => set('year', e.target.value)} error={errors.year} />
@@ -990,7 +995,7 @@ function CarFormModal({ car, onClose, onSaved, onPremiumRequired }) {
         {(form.listing_type === 'rental' || form.listing_type === 'both') && (
           <div style={{ marginTop: 16, background: 'rgba(201,169,110,0.05)', border: '1px solid rgba(201,169,110,0.2)', borderRadius: 12, padding: 16 }}>
             <div style={{ fontFamily: C.dm, fontSize: 12, fontWeight: 700, color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12 }}>Options de location</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div className="ac-form-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <Input label="Prix / jour (FCFA)" type="number" value={form.rental_price_per_day} onChange={e => set('rental_price_per_day', e.target.value)} placeholder="25000" />
               <Input label="Caution (FCFA)" type="number" value={form.rental_deposit} onChange={e => set('rental_deposit', e.target.value)} placeholder="100000" />
               <Input label="Durée min. (jours)" type="number" value={form.rental_min_days} onChange={e => set('rental_min_days', e.target.value)} placeholder="1" />

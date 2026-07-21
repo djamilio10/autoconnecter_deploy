@@ -57,7 +57,7 @@ export default function Booking({ carId, sellerId, navigate, user }) {
   const seller = car?.seller;
 
   const StepIndicator = () => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 0, marginBottom: 48 }}>
+    <div className="ac-stepper" style={{ display: 'flex', alignItems: 'center', gap: 0, marginBottom: 48 }}>
       {['Choisir une date', 'Choisir un horaire', 'Confirmer'].map((s, i) => {
         const n = i + 1;
         const active = step === n, done = step > n;
@@ -105,18 +105,18 @@ export default function Booking({ carId, sellerId, navigate, user }) {
 
   if (done) return (
     <div style={{ minHeight: '100vh', background: C.bg, paddingTop: 64, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ textAlign: 'center', maxWidth: 480, padding: '0 32px' }}>
+      <div style={{ textAlign: 'center', maxWidth: 480, padding: '0 24px' }}>
         <div style={{
           width: 80, height: 80, borderRadius: '50%', background: 'rgba(201,169,110,0.1)',
           border: `2px solid ${C.gold}`, display: 'flex', alignItems: 'center', justifyContent: 'center',
           margin: '0 auto 24px', fontSize: 36,
         }}>✓</div>
-        <h2 style={{ fontFamily: C.playfair, fontSize: 36, color: C.text, marginBottom: 12, fontWeight: 700 }}>Rendez-vous confirmé !</h2>
+        <h2 className="ac-h2" style={{ fontFamily: C.playfair, fontSize: 36, color: C.text, marginBottom: 12, fontWeight: 700 }}>Rendez-vous confirmé !</h2>
         <p style={{ fontFamily: C.dm, fontSize: 15, color: C.muted, lineHeight: 1.7, marginBottom: 32 }}>
           Votre essai est réservé le <strong style={{ color: C.text }}>{formatDate(selectedDate)}</strong> à <strong style={{ color: C.text }}>{selectedTime}</strong>.
           Le vendeur vous contactera pour confirmer.
         </p>
-        <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+        <div className="ac-wrap" style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
           <Btn onClick={() => navigate('buyer-dashboard')}>Mes rendez-vous</Btn>
           <Btn variant="secondary" onClick={() => navigate('catalogue')}>Retour au catalogue</Btn>
         </div>
@@ -126,7 +126,7 @@ export default function Booking({ carId, sellerId, navigate, user }) {
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, paddingTop: 64 }}>
-      <div style={{ maxWidth: 880, margin: '0 auto', padding: '40px 32px 80px' }}>
+      <div className="ac-container" style={{ maxWidth: 880, margin: '0 auto', padding: '40px 32px 80px' }}>
         <button onClick={() => navigate('car-detail', { carId })} style={{
           background: 'none', border: 'none', color: C.muted,
           fontFamily: C.dm, fontSize: 14, cursor: 'pointer', padding: 0, marginBottom: 32,
@@ -134,12 +134,12 @@ export default function Booking({ carId, sellerId, navigate, user }) {
 
         <StepIndicator />
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 32 }}>
+        <div className="ac-split" style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 32 }}>
           <div>
             {/* Step 1: Date */}
             {step === 1 && (
               <div>
-                <h2 style={{ fontFamily: C.playfair, fontSize: 32, color: C.text, margin: '0 0 8px' }}>Choisissez une date</h2>
+                <h2 className="ac-h2" style={{ fontFamily: C.playfair, fontSize: 32, color: C.text, margin: '0 0 8px' }}>Choisissez une date</h2>
                 <p style={{ fontFamily: C.dm, color: C.muted, margin: '0 0 32px' }}>Sélectionnez le jour qui vous convient pour votre essai</p>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8 }}>
                   {days.map((d, i) => {
@@ -171,7 +171,7 @@ export default function Booking({ carId, sellerId, navigate, user }) {
             {/* Step 2: Time */}
             {step === 2 && (
               <div>
-                <h2 style={{ fontFamily: C.playfair, fontSize: 32, color: C.text, margin: '0 0 8px' }}>Choisissez un horaire</h2>
+                <h2 className="ac-h2" style={{ fontFamily: C.playfair, fontSize: 32, color: C.text, margin: '0 0 8px' }}>Choisissez un horaire</h2>
                 <p style={{ fontFamily: C.dm, color: C.muted, margin: '0 0 32px' }}>{formatDate(selectedDate)}</p>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
                   {TIMES.map(t => {
@@ -199,11 +199,11 @@ export default function Booking({ carId, sellerId, navigate, user }) {
             {/* Step 3: Confirm */}
             {step === 3 && (
               <div>
-                <h2 style={{ fontFamily: C.playfair, fontSize: 32, color: C.text, margin: '0 0 8px' }}>Confirmer le rendez-vous</h2>
+                <h2 className="ac-h2" style={{ fontFamily: C.playfair, fontSize: 32, color: C.text, margin: '0 0 8px' }}>Confirmer le rendez-vous</h2>
                 <p style={{ fontFamily: C.dm, color: C.muted, margin: '0 0 32px' }}>Vérifiez les détails de votre essai</p>
 
                 <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: 24, marginBottom: 24 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                  <div className="ac-form-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
                     {[
                       { label: 'Véhicule', val: `${car?.make} ${car?.model} ${car?.year}` },
                       { label: 'Vendeur', val: seller?.name || '—' },

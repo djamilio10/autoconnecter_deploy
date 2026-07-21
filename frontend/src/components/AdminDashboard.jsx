@@ -71,8 +71,8 @@ export default function AdminDashboard({ user, navigate, platformSettings = {}, 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, paddingTop: 64 }}>
       {/* Header */}
-      <div style={{ borderBottom: `1px solid ${C.border2}`, padding: '32px 32px 24px', maxWidth: 1400, margin: '0 auto' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="ac-page-header" style={{ borderBottom: `1px solid ${C.border2}`, padding: '32px 32px 24px', maxWidth: 1400, margin: '0 auto' }}>
+        <div className="ac-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
               <div style={{
@@ -82,7 +82,7 @@ export default function AdminDashboard({ user, navigate, platformSettings = {}, 
               }}>ADMIN</div>
               <span style={{ fontFamily: C.dm, fontSize: 13, color: C.muted }}>Panneau d'administration</span>
             </div>
-            <h1 style={{ fontFamily: C.playfair, fontSize: 34, color: C.text, margin: 0, fontWeight: 700 }}>
+            <h1 className="ac-h1" style={{ fontFamily: C.playfair, fontSize: 34, color: C.text, margin: 0, fontWeight: 700 }}>
               AutoConnect Admin
             </h1>
           </div>
@@ -92,9 +92,9 @@ export default function AdminDashboard({ user, navigate, platformSettings = {}, 
         </div>
       </div>
 
-      <div style={{ maxWidth: 1400, margin: '0 auto', padding: '0 32px 80px' }}>
+      <div className="ac-container" style={{ maxWidth: 1400, margin: '0 auto', padding: '0 32px 80px' }}>
         {/* Tabs */}
-        <div style={{ display: 'flex', gap: 0, borderBottom: `1px solid ${C.border}`, margin: '24px 0 32px' }}>
+        <div className="ac-tabs" style={{ display: 'flex', gap: 0, borderBottom: `1px solid ${C.border}`, margin: '24px 0 32px' }}>
           {TABS.map((t, i) => (
             <button key={t} onClick={() => setTab(i)} style={{
               background: 'none', border: 'none', color: tab === i ? C.gold : C.muted,
@@ -152,7 +152,7 @@ function OverviewTab({ stats }) {
   return (
     <div>
       {/* KPI cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20, marginBottom: 32 }}>
+      <div className="ac-grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20, marginBottom: 32 }}>
         {statCards.map(s => (
           <Card key={s.label}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
@@ -167,7 +167,7 @@ function OverviewTab({ stats }) {
         ))}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 24 }}>
+      <div className="ac-grid-3" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 24 }}>
         {/* User breakdown */}
         <Card>
           <h3 style={{ fontFamily: C.playfair, fontSize: 18, color: C.text, margin: '0 0 20px', fontWeight: 600 }}>Répartition utilisateurs</h3>
@@ -318,7 +318,7 @@ function UsersTab() {
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: 12, marginBottom: 24, alignItems: 'center' }}>
+      <div className="ac-wrap" style={{ display: 'flex', gap: 12, marginBottom: 24, alignItems: 'center' }}>
         <SearchBar value={search} onChange={setSearch} placeholder="Rechercher un utilisateur..." />
         <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} style={{
           background: C.surface, border: `1px solid ${C.border}`, color: C.text,
@@ -335,6 +335,7 @@ function UsersTab() {
       </div>
 
       {loading ? <Spinner /> : users.length === 0 ? <EmptyState icon="👥" text="Aucun utilisateur trouvé" /> : (
+        <div className="ac-scroll-x">
         <Card style={{ padding: 0 }}>
           <div style={{
             display: 'grid', gridTemplateColumns: '40px 1fr 1fr 110px 110px 100px 160px',
@@ -385,15 +386,16 @@ function UsersTab() {
             );
           })}
         </Card>
+        </div>
       )}
 
       {/* Ban / manage modal */}
       {banTarget && (
-        <div style={{
+        <div className="ac-modal-overlay" style={{
           position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(5px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: 20,
         }}>
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 20, padding: 36, maxWidth: 460, width: '90%' }}>
+          <div className="ac-modal" style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 20, padding: 36, maxWidth: 460, width: '90%' }}>
             <h3 style={{ fontFamily: C.playfair, fontSize: 22, color: C.text, margin: '0 0 6px' }}>Gérer le compte</h3>
             <p style={{ fontFamily: C.dm, fontSize: 13, color: C.muted, margin: '0 0 24px' }}>
               {banTarget.name} · <span style={{ color: C.text }}>{banTarget.email}</span>
@@ -626,7 +628,7 @@ function SellersTab() {
       </div>
 
       {loading ? <Spinner /> : sellers.length === 0 ? <EmptyState icon="🏪" text="Aucun vendeur" /> : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 20 }}>
+        <div className="ac-cards-2" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 20 }}>
           {sellers.map(s => (
             <Card key={s.id} style={{ border: `1px solid ${s.is_premium ? C.goldBorder : C.border}`, background: s.is_premium ? 'rgba(201,169,110,0.04)' : C.surface }}>
               <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', marginBottom: 16 }}>
@@ -674,7 +676,7 @@ function SellersTab() {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 16 }}>
+              <div className="ac-specs-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 16 }}>
                 {[
                   { label: 'Annonces', val: s.car_count },
                   { label: 'RDV', val: s.appointment_count },
@@ -711,11 +713,11 @@ function SellersTab() {
 
       {/* Modal premium */}
       {premiumModal && (
-        <div style={{
+        <div className="ac-modal-overlay" style={{
           position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(6px)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: 20,
         }}>
-          <div style={{ background: C.surface, border: `1px solid ${C.goldBorder}`, borderRadius: 20, padding: 36, maxWidth: 440, width: '100%' }}>
+          <div className="ac-modal" style={{ background: C.surface, border: `1px solid ${C.goldBorder}`, borderRadius: 20, padding: 36, maxWidth: 440, width: '100%' }}>
             <h3 style={{ fontFamily: C.playfair, fontSize: 22, color: C.text, margin: '0 0 6px' }}>
               ⭐ Abonnement Premium
             </h3>
@@ -811,6 +813,7 @@ function AppointmentsTab() {
       </div>
 
       {loading ? <Spinner /> : appts.length === 0 ? <EmptyState icon="📅" text="Aucun rendez-vous" /> : (
+        <div className="ac-scroll-x">
         <Card style={{ padding: 0 }}>
           <div style={{
             display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 110px 110px 160px',
@@ -845,6 +848,7 @@ function AppointmentsTab() {
             </div>
           ))}
         </Card>
+        </div>
       )}
     </div>
   );
@@ -962,11 +966,11 @@ function ReportsTab() {
 
       {/* Report handling modal */}
       {selected && (
-        <div style={{
+        <div className="ac-modal-overlay" style={{
           position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(6px)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: '20px',
         }}>
-          <div style={{
+          <div className="ac-modal" style={{
             background: C.surface, border: `1px solid ${C.border}`, borderRadius: 20,
             width: '100%', maxWidth: 560, maxHeight: '90vh', overflowY: 'auto',
             display: 'flex', flexDirection: 'column',
@@ -1129,9 +1133,9 @@ function SecurityTab() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+      <div className="ac-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <div>
-          <h2 style={{ fontFamily: C.playfair, fontSize: 24, color: C.text, margin: '0 0 4px' }}>Journal d'audit</h2>
+          <h2 className="ac-h2" style={{ fontFamily: C.playfair, fontSize: 24, color: C.text, margin: '0 0 4px' }}>Journal d'audit</h2>
           <p style={{ fontFamily: C.dm, fontSize: 13, color: C.muted, margin: 0 }}>
             Toutes les actions administrateur sont enregistrées ici. Les 100 dernières entrées sont affichées.
           </p>
@@ -1143,6 +1147,7 @@ function SecurityTab() {
       </div>
 
       {loading ? <Spinner /> : logs.length === 0 ? <EmptyState icon="🔒" text="Aucune entrée dans le journal" /> : (
+        <div className="ac-scroll-x">
         <Card style={{ padding: 0 }}>
           <div style={{
             display: 'grid', gridTemplateColumns: '32px 1fr 1fr 1fr auto',
@@ -1178,6 +1183,7 @@ function SecurityTab() {
             );
           })}
         </Card>
+        </div>
       )}
     </div>
   );
@@ -1335,11 +1341,11 @@ function PlatformSettingsTab({ platformSettings, onSettingsChange }) {
 // ── Confirm Modal ─────────────────────────────────────────────────────────────
 function ConfirmModal({ title, message, onConfirm, onCancel }) {
   return (
-    <div style={{
+    <div className="ac-modal-overlay" style={{
       position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: 20,
     }}>
-      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 20, padding: 36, maxWidth: 420, width: '90%' }}>
+      <div className="ac-modal" style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 20, padding: 36, maxWidth: 420, width: '90%' }}>
         <h3 style={{ fontFamily: C.playfair, fontSize: 22, color: C.text, margin: '0 0 12px' }}>{title}</h3>
         <p style={{ fontFamily: C.dm, fontSize: 14, color: C.muted, margin: '0 0 28px', lineHeight: 1.6 }}>{message}</p>
         <div style={{ display: 'flex', gap: 12 }}>

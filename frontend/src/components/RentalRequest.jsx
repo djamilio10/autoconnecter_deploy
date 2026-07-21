@@ -143,7 +143,7 @@ export default function RentalRequest({ carId, navigate, user }) {
             </div>
           ))}
         </div>
-        <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+        <div className="ac-wrap" style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
           <Btn onClick={() => navigate('buyer-dashboard')} variant="secondary">Mes locations</Btn>
           <Btn onClick={() => navigate('car-detail', { carId })}>Retour à l'annonce</Btn>
         </div>
@@ -153,7 +153,7 @@ export default function RentalRequest({ carId, navigate, user }) {
 
   return (
     <div style={{ background: C.bg, minHeight: '100vh', paddingTop: 64 }}>
-      <div style={{ maxWidth: 900, margin: '0 auto', padding: '40px 24px' }}>
+      <div className="ac-container" style={{ maxWidth: 900, margin: '0 auto', padding: '40px 24px' }}>
 
         {/* Header */}
         <button onClick={() => navigate('car-detail', { carId })} style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer', fontFamily: C.dm, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 32 }}>
@@ -165,7 +165,7 @@ export default function RentalRequest({ carId, navigate, user }) {
           <div style={{ fontFamily: C.dm, fontSize: 14, color: C.muted, marginTop: 4 }}>Chez {seller?.name} · {car?.location}</div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 24, alignItems: 'start' }}>
+        <div className="ac-split" style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 24, alignItems: 'start' }}>
 
           {/* Left: Calendar + note */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>

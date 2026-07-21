@@ -45,16 +45,16 @@ export default function Catalogue({ navigate, favorites, onToggleFavorite, platf
   return (
     <div style={{ minHeight: '100vh', background: C.bg, paddingTop: 64 }}>
       {/* Header */}
-      <div style={{ borderBottom: `1px solid ${C.border2}`, padding: '40px 32px 32px', maxWidth: 1280, margin: '0 auto' }}>
-        <h1 style={{ fontFamily: C.playfair, fontSize: 42, color: C.text, margin: '0 0 8px', fontWeight: 700 }}>Catalogue</h1>
+      <div className="ac-page-header" style={{ borderBottom: `1px solid ${C.border2}`, padding: '40px 32px 32px', maxWidth: 1280, margin: '0 auto' }}>
+        <h1 className="ac-h1" style={{ fontFamily: C.playfair, fontSize: 42, color: C.text, margin: '0 0 8px', fontWeight: 700 }}>Catalogue</h1>
         <p style={{ fontFamily: C.dm, color: C.muted, margin: 0 }}>
           {loading ? 'Chargement...' : `${cars.length} véhicule${cars.length !== 1 ? 's' : ''} disponible${cars.length !== 1 ? 's' : ''}`}
         </p>
       </div>
 
-      <div style={{ maxWidth: 1280, margin: '0 auto', padding: '32px', display: 'flex', gap: 32 }}>
+      <div className="ac-container ac-split-flex" style={{ maxWidth: 1280, margin: '0 auto', padding: '32px', display: 'flex', gap: 32 }}>
         {/* Sidebar */}
-        <div style={{ width: 260, flexShrink: 0 }}>
+        <div className="ac-side" style={{ width: 260, flexShrink: 0 }}>
           <div style={{ position: 'sticky', top: 80, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: 24 }}>
             <h3 style={{ fontFamily: C.dm, fontSize: 14, fontWeight: 600, color: C.text, margin: '0 0 24px', letterSpacing: '0.05em', textTransform: 'uppercase' }}>Filtres</h3>
 
@@ -139,7 +139,7 @@ export default function Catalogue({ navigate, favorites, onToggleFavorite, platf
         {/* Results */}
         <div style={{ flex: 1 }}>
           {/* Sort bar */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 24, gap: 8 }}>
+          <div className="ac-wrap" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 24, gap: 8 }}>
             {[['recent', 'Plus récents'], ['price-asc', 'Prix ↑'], ['price-desc', 'Prix ↓'], ['mileage', 'Kilométrage']].map(([val, label]) => (
               <button key={val} onClick={() => setSort(val)} style={{
                 background: sort === val ? C.goldDim : 'transparent',
@@ -158,7 +158,7 @@ export default function Catalogue({ navigate, favorites, onToggleFavorite, platf
               <p style={{ fontSize: 14, marginTop: 8 }}>Essayez de modifier vos filtres</p>
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 20 }}>
+            <div className="ac-cards-2" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 20 }}>
               {cars.map(car => (
                 <CarCard
                   key={car.id}

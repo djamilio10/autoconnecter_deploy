@@ -174,7 +174,7 @@ function ProfileSection({ user, setUser }) {
     <Section title="Informations personnelles" sub="Modifiez vos informations de profil">
       {user.user_type === 'seller' && <LogoUploader user={user} />}
       <Alert type={msg?.type} msg={msg?.text} />
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+      <div className="ac-form-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
         <Input label="Prénom" value={form.first_name} onChange={e => setForm(f => ({ ...f, first_name: e.target.value }))} />
         <Input label="Nom" value={form.last_name}  onChange={e => setForm(f => ({ ...f, last_name:  e.target.value }))} />
         <Input label="Téléphone" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+221 77 123 45 67" />
@@ -552,22 +552,22 @@ export default function Settings({ user, setUser, navigate, onLogout }) {
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, paddingTop: 64 }}>
-      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '40px 32px 80px' }}>
+      <div className="ac-container" style={{ maxWidth: 1100, margin: '0 auto', padding: '40px 32px 80px' }}>
 
         {/* Header */}
         <div style={{ marginBottom: 36 }}>
           <div style={{ fontFamily: C.dm, fontSize: 12, color: C.gold, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 8 }}>
             Mon compte
           </div>
-          <h1 style={{ fontFamily: C.playfair, fontSize: 36, fontWeight: 700, color: C.text, margin: 0 }}>
+          <h1 className="ac-h1" style={{ fontFamily: C.playfair, fontSize: 36, fontWeight: 700, color: C.text, margin: 0 }}>
             Paramètres
           </h1>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 28, alignItems: 'start' }}>
+        <div className="ac-split" style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 28, alignItems: 'start' }}>
 
           {/* Sidebar */}
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: 8, position: 'sticky', top: 80 }}>
+          <div className="ac-unsticky" style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: 8, position: 'sticky', top: 80 }}>
             <AvatarUploader user={user} setUser={setUser} />
 
             {SECTIONS.map(s => (

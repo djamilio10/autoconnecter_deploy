@@ -1,0 +1,245 @@
+/* ============================================================================
+   AutoConnect — Système responsive mobile
+   ----------------------------------------------------------------------------
+   L'application est stylée en « inline styles » (objets React) avec des valeurs
+   en pixels pensées pour le desktop. Pour rendre le tout responsive sans
+   réécrire chaque composant, on pose des classes sémantiques `ac-*` sur les
+   conteneurs clés, puis on surcharge leurs propriétés en mobile ICI.
+
+   IMPORTANT : une déclaration `!important` dans une feuille de style l'emporte
+   sur un style inline « normal » (React ne peut pas marquer un style inline
+   en !important). C'est ce qui permet à ces règles de gagner sur les valeurs
+   desktop posées en inline.
+
+   Breakpoints :
+     - 1024px : layouts « contenu + barre latérale » qui passent en colonne
+     - 768px  : mobile — la majorité des grilles passent en 1–2 colonnes
+     - 480px  : petits téléphones — derniers ajustements de taille
+   ========================================================================== */
+
+/* Hamburger caché par défaut (desktop) ; affiché en mobile plus bas. */
+.ac-nav-burger { display: none; }
+
+/* Filet de sécurité : jamais de défilement horizontal parasite sur mobile. */
+@media (max-width: 1024px) {
+  html, body { overflow-x: hidden; }
+}
+
+/* ────────────────────────────────────────────────────────────────────────
+   1024px — Layouts « contenu + sidebar » : on empile
+   ──────────────────────────────────────────────────────────────────────── */
+@media (max-width: 1024px) {
+  /* Split en grille (CarDetail 1fr 360px, HomePage hero, Booking, RentalRequest,
+     Settings 220px 1fr) → une seule colonne, la sidebar passe dessous. */
+  .ac-split {
+    grid-template-columns: 1fr !important;
+    gap: 28px !important;
+  }
+  /* Split en flex (Catalogue : filtres + résultats) → colonne. */
+  .ac-split-flex {
+    flex-direction: column !important;
+    gap: 20px !important;
+  }
+  /* La barre latérale à largeur fixe reprend toute la largeur. */
+  .ac-side {
+    width: 100% !important;
+  }
+  /* Une sidebar sticky n'a plus de sens une fois empilée. */
+  .ac-side > *,
+  .ac-unsticky {
+    position: static !important;
+    top: auto !important;
+  }
+  /* Grilles 4 colonnes (specs, stats) → 2 colonnes dès la tablette. */
+  .ac-grid-4,
+  .ac-specs-4 {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────────────
+   768px — Mobile : cœur des règles
+   ──────────────────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+
+  /* ── Navbar ──────────────────────────────────────────────────────────
+     On cache uniquement les liens de nav, jamais la zone auth/utilisateur. */
+  .ac-nav-links { display: none !important; }
+  .ac-nav-burger { display: block !important; }
+  .ac-nav { padding: 0 10px !important; }
+  .ac-nav-auth { gap: 6px !important; }
+
+  /* Logo compacté : sinon Logo + Connexion + S'inscrire + ☰ dépassent
+     la largeur d'un téléphone et le hamburger sort de l'écran. */
+  .ac-logo { gap: 7px !important; }
+  .ac-logo > svg:first-child { width: 36px !important; height: 27px !important; flex-shrink: 0; }
+  /* Seulement le span « titre » (les spans internes Auto/Connect héritent). */
+  .ac-logo > div > span { font-size: 15px !important; }
+  /* Le drapeau est décoratif : on le retire pour gagner ~30px. */
+  .ac-logo > svg:last-child { display: none !important; }
+
+  /* Garantie anti-débordement, quelle que soit la largeur (jusqu'à 320px) :
+     la zone auth + hamburger ne se comprime jamais, c'est le logo qui cède
+     et dont le texte se tronque proprement. Le ☰ reste donc toujours atteignable. */
+  .ac-nav-auth { flex-shrink: 0 !important; }
+  .ac-logo { flex-shrink: 1 !important; min-width: 0 !important; overflow: hidden; }
+  .ac-logo > div { min-width: 0 !important; overflow: hidden; }
+  /* Le titre reste sur UNE ligne et se tronque en « Auto Con… » si besoin.
+     Cible le span titre uniquement : le passer en block sur les spans internes
+     ferait retomber « Connect » à la ligne. */
+  .ac-logo > div > span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+  }
+  .ac-auth-btns { gap: 6px !important; }
+  .ac-btn-login { padding: 7px 12px !important; font-size: 13px !important; }
+  .ac-btn-register { padding: 7px 14px !important; font-size: 13px !important; }
+  .ac-user-btn { padding: 6px 10px !important; font-size: 12px !important; }
+  .ac-user-name { max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ── Conteneurs & entêtes de page ────────────────────────────────────── */
+  .ac-container {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+  .ac-page-header {
+    padding: 26px 16px 20px !important;
+  }
+  /* Ligne d'entête (titre + bouton d'action) → empilée. */
+  .ac-header-row {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 14px !important;
+  }
+  .ac-header-row .ac-header-action {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+
+  /* ── Titres ──────────────────────────────────────────────────────────── */
+  .ac-h1 { font-size: 28px !important; line-height: 1.15 !important; }
+  .ac-h2 { font-size: 24px !important; line-height: 1.2 !important; }
+  /* Titre géant du hero d'accueil (62px desktop). */
+  .ac-hero-title { font-size: 34px !important; line-height: 1.15 !important; }
+
+  /* ── Sections & bandeaux (accueil) ───────────────────────────────────── */
+  /* Grosses sections verticales (padding 100px) → compactes. */
+  .ac-section { padding-top: 56px !important; padding-bottom: 56px !important; padding-left: 16px !important; padding-right: 16px !important; }
+  /* Bandeau CTA vendeur : padding géant + ligne → colonne. */
+  .ac-cta-band {
+    padding: 32px 20px !important;
+    margin-left: 16px !important;
+    margin-right: 16px !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    text-align: left;
+  }
+  /* Rangée de boutons hero → empilée pleine largeur. */
+  .ac-cta-row { flex-direction: column !important; align-items: stretch !important; }
+  .ac-cta-row > * { width: 100% !important; }
+
+  /* Image « hero » de la fiche véhicule (420px desktop). */
+  .ac-detail-hero { height: 240px !important; border-radius: 16px !important; }
+
+  /* ── Grilles ─────────────────────────────────────────────────────────── */
+  /* Statistiques 4 colonnes → 2 (grille 2×2, chiffres bien lisibles). */
+  .ac-grid-4 { grid-template-columns: repeat(2, 1fr) !important; gap: 12px !important; }
+  /* Specs 4 colonnes → 2. */
+  .ac-specs-4 { grid-template-columns: repeat(2, 1fr) !important; gap: 10px !important; }
+  /* Grilles 3 et 2 colonnes génériques → 1 colonne. */
+  .ac-grid-3 { grid-template-columns: 1fr !important; gap: 16px !important; }
+  .ac-grid-2 { grid-template-columns: 1fr !important; gap: 12px !important; }
+  /* Formulaires 2 colonnes → 1 colonne. */
+  .ac-form-2 { grid-template-columns: 1fr !important; gap: 14px !important; }
+  /* Grilles de cartes véhicules : auto-fit → 1 col sur téléphone, 2 sur large. */
+  .ac-cards-2,
+  .ac-cards-3 {
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)) !important;
+    gap: 16px !important;
+  }
+
+  /* ── Onglets : défilement horizontal plutôt que retour à la ligne ────── */
+  .ac-tabs {
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .ac-tabs::-webkit-scrollbar { display: none; }
+  .ac-tabs > * {
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
+    padding: 12px 16px !important;
+    font-size: 13px !important;
+  }
+
+  /* ── Barres/rangées qui doivent passer à la ligne ────────────────────── */
+  .ac-wrap { flex-wrap: wrap !important; }
+
+  /* ── Indicateur d'étapes (réservation) : libellés compacts ───────────── */
+  .ac-stepper span { font-size: 10px !important; }
+
+  /* ── Modales ─────────────────────────────────────────────────────────── */
+  /* Overlay : on colle en haut pour laisser défiler les modales hautes. */
+  .ac-modal-overlay {
+    padding: 12px !important;
+    align-items: flex-start !important;
+    overflow-y: auto !important;
+  }
+  .ac-modal {
+    max-width: 100% !important;
+    width: 100% !important;
+    padding: 20px !important;
+    border-radius: 16px !important;
+    max-height: calc(100vh - 24px) !important;
+  }
+
+  /* ── Champs : 16px minimum pour éviter le zoom auto d'iOS au focus ────── */
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+
+  /* ── Tableaux admin : défilement horizontal encapsulé ────────────────── */
+  .ac-scroll-x {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  .ac-scroll-x > * {
+    min-width: 640px;
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────────────
+   480px — Petits téléphones : derniers ajustements
+   ──────────────────────────────────────────────────────────────────────── */
+@media (max-width: 480px) {
+  .ac-h1 { font-size: 24px !important; }
+  .ac-h2 { font-size: 21px !important; }
+
+  /* Statistiques : 1 colonne pleine largeur sur très petit écran. */
+  .ac-grid-4 { grid-template-columns: 1fr !important; }
+  /* Specs : 2 colonnes conservées (compact et lisible). */
+
+  .ac-btn-login { padding: 6px 10px !important; font-size: 12px !important; }
+  .ac-btn-register { padding: 6px 12px !important; font-size: 12px !important; }
+  /* On masque le bouton ADMIN dans la navbar pour gagner de la place. */
+  .ac-admin-btn { display: none !important; }
+
+  /* Modales encore un peu plus compactes. */
+  .ac-modal { padding: 16px !important; }
+}
+
+/* ────────────────────────────────────────────────────────────────────────
+   Messagerie — layout dédié (déjà balisé ac-msg-*)
+   ──────────────────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .ac-msg-layout { flex-direction: column !important; height: auto !important; min-height: 60vh; }
+  .ac-msg-sidebar {
+    width: 100% !important;
+    max-height: 240px !important;
+    border-right: none !important;
+    border-bottom: 1px solid #27272A !important;
+  }
+}

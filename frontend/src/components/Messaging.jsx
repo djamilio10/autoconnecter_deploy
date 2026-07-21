@@ -91,7 +91,7 @@ export default function Messaging({ user, navigate }) {
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, paddingTop: 64 }}>
-      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 24px' }}>
+      <div className="ac-container" style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 24px' }}>
         {/* Header */}
         <div style={{ marginBottom: 24, display: 'flex', alignItems: 'center', gap: 12 }}>
           <button onClick={() => navigate('home')} style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer', fontSize: 18 }}>←</button>
