@@ -1,11 +1,35 @@
 autoconnect.site, www.autoconnect.site {
     encode gzip
 
-    @backend path /api/* /admin/* /static/* /media/*
+    # ── Admin Django : barrière d'authentification supplémentaire ──────────
+    # L'interface /admin/ de Django n'a aucune limite de tentatives de mot de
+    # passe : django-ratelimit ne protège que les vues de l'API, décorées une
+    # par une, et admin.site.urls n'en fait pas partie. Un robot peut donc y
+    # essayer des mots de passe sans frein.
+    #
+    # Cette couche Caddy s'exécute AVANT Django : sans identifiants valides,
+    # la requête n'atteint jamais l'application.
+    #
+    # Les valeurs viennent de .env.production (jamais committé) et non du
+    # dépôt : celui-ci est public, et une empreinte publiée peut être cassée
+    # hors ligne, sans limite de tentatives ni trace.
+    @admin path /admin/*
+    handle @admin {
+        basic_auth {
+            {env.ADMIN_USER} {env.ADMIN_PASSWORD_HASH}
+        }
+        reverse_proxy backend:8000
+    }
+
+    # ── API, fichiers statiques et médias ─────────────────────────────────
+    # /static/* reste public : la feuille de style de la page de connexion
+    # admin en dépend, et ces fichiers ne contiennent rien de sensible.
+    @backend path /api/* /static/* /media/*
     handle @backend {
         reverse_proxy backend:8000
     }
 
+    # ── Application React (SPA) ───────────────────────────────────────────
     handle {
         root * /srv
         try_files {path} /index.html

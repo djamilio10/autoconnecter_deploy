@@ -39,6 +39,10 @@ services:
   caddy:
     build: ./frontend
     restart: unless-stopped
+    # ADMIN_USER / ADMIN_PASSWORD_HASH : identifiants du basic_auth qui protège
+    # /admin/. Lus depuis .env.production (hors dépôt) et injectés dans le
+    # Caddyfile via {env.…}.
+    env_file: .env.production
     ports:
       - "80:80"
       - "443:443"
